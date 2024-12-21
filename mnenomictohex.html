@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+</body>
+</html>
+
+<script>
+  const validInputsLengths = [132, 165, 198, 231, 264]
+  const validENTLengths = [128, 160, 192, 224, 256];
+
+  function extractChecksum(binaryString) {
+    // Calculate ENT length based on the binary string length
+    let ENTLength = Math.floor(binaryString.length / 11) * 11;
+    let ENT = binaryString.slice(0, ENTLength);
+
+    // Calculate the checksum length based on the ENT length
+    let checksumLength = ENTLength / 32;
+
+    console.log('ENT:', ENT);
+    console.log('Checksum length:', checksum.length);
+
+    if (!validENTLengths.includes(ENT.length)) {
+      throw new Error('Invalid ENT length. Must be a multiple of 32 bits between 128 and 256 bits.');
+    }
+
+    return checksum;
+  }
+
+  // Example usage
+  const binaryString = '1101101010111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011101110111011';
+  const checksum = extractChecksum(binaryString);
+  console.log('Checksum:', checksum)
+
+</script>

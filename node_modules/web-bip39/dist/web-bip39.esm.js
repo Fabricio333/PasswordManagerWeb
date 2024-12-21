@@ -1,0 +1,303 @@
+/******************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+
+function __awaiter(thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+}
+
+function __generator(thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+}
+
+typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
+    var e = new Error(message);
+    return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
+};
+
+var _a;
+var crypto = typeof window === 'undefined' ? globalThis.crypto : window.crypto;
+var subtle = (_a = crypto.subtle) !== null && _a !== void 0 ? _a : crypto.webkitSubtle;
+function utf8ToBytes(str) {
+    return new TextEncoder().encode(str);
+}
+function toBytes(data) {
+    if (typeof data === 'string')
+        data = utf8ToBytes(data);
+    return data;
+}
+function sha(algorithm, input) {
+    return __awaiter(this, void 0, void 0, function () {
+        var arrayBuffer;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, subtle.digest(algorithm, toBytes(input))];
+                case 1:
+                    arrayBuffer = _a.sent();
+                    return [2 /*return*/, new Uint8Array(arrayBuffer)];
+            }
+        });
+    });
+}
+function pbkdf2(hashAlgorithm, password, salt, iterations, byteLength) {
+    return __awaiter(this, void 0, void 0, function () {
+        var baseKey, arrayBuffer;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, subtle.importKey('raw', toBytes(password), 'PBKDF2', false, ['deriveBits'])];
+                case 1:
+                    baseKey = _a.sent();
+                    return [4 /*yield*/, subtle.deriveBits({
+                            name: 'PBKDF2',
+                            hash: hashAlgorithm,
+                            salt: toBytes(salt),
+                            iterations: iterations,
+                        }, baseKey, byteLength * 8)];
+                case 2:
+                    arrayBuffer = _a.sent();
+                    return [2 /*return*/, new Uint8Array(arrayBuffer)];
+            }
+        });
+    });
+}
+function randomBytes(byteLength) {
+    if (byteLength === void 0) { byteLength = 32; }
+    return crypto.getRandomValues(new Uint8Array(byteLength));
+}
+
+function assert(condition, message) {
+    if (!condition) {
+        throw new Error(message);
+    }
+}
+function padStart(str, length, padString) {
+    while (str.length < length) {
+        str = padString + str;
+    }
+    return str;
+}
+function binaryToByte(bin) {
+    return parseInt(bin, 2);
+}
+function bytesToBinary(bytes) {
+    return Array.from(bytes).map(function (x) { return padStart(x.toString(2), 8, '0'); }).join('');
+}
+
+// Is japanese wordlist
+var isJapanese = function (wordlist) { return wordlist[0] === '\u3042\u3044\u3053\u304f\u3057\u3093'; };
+// Normalization replaces equivalent sequences of characters
+// so that any two texts that are equivalent will be reduced
+// to the same sequence of code points, called the normal form of the original text.
+function nfkd(str) {
+    if (typeof str !== 'string')
+        throw new TypeError("Invalid mnemonic type: ".concat(typeof str));
+    return str.normalize('NFKD');
+}
+function normalize(str) {
+    var norm = nfkd(str);
+    var words = norm.split(' ');
+    if (![12, 15, 18, 21, 24].includes(words.length))
+        throw new Error('Invalid mnemonic');
+    return { nfkd: norm, words: words };
+}
+function assertEntropy(entropy) {
+    assert(entropy instanceof Uint8Array &&
+        [16, 20, 24, 28, 32].includes(entropy.length), 'Invalid entropy');
+}
+/**
+ * Generate mnemonic. Uses Cryptographically-Secure Random Number Generator.
+ * @param wordlist imported wordlist for specific language
+ * @param strength mnemonic strength 128-256 bits
+ * @example
+ * generateMnemonic(wordlist, 128)
+ * // 'bunker expand insane mean adapt throw focus business network among cruel tomato'
+ */
+function generateMnemonic(wordlist, strength) {
+    if (strength === void 0) { strength = 128; }
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            assert(Number.isSafeInteger(strength) &&
+                strength > 0 &&
+                strength <= 256 &&
+                strength % 32 === 0, 'Invalid strength');
+            return [2 /*return*/, entropyToMnemonic(randomBytes(strength / 8), wordlist)];
+        });
+    });
+}
+function deriveChecksumBits(entropy) {
+    return __awaiter(this, void 0, void 0, function () {
+        var ENT, CS, hash;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    ENT = entropy.length * 8;
+                    CS = ENT / 32;
+                    return [4 /*yield*/, sha('SHA-256', entropy)];
+                case 1:
+                    hash = _a.sent();
+                    return [2 /*return*/, bytesToBinary(hash).slice(0, CS)];
+            }
+        });
+    });
+}
+/**
+ * Converts mnemonic string to raw entropy in form of byte array.
+ * @param mnemonic 12-24 words
+ * @param wordlist imported wordlist for specific language
+ * @return entropy
+ * @example
+ * const mnem = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+ * await mnemonicToEntropy(mnem, wordlist)
+ * // Produces
+ * new Uint8Array([
+ *   0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f,
+ *   0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f
+ * ])
+ */
+function mnemonicToEntropy(mnemonic, wordlist) {
+    return __awaiter(this, void 0, void 0, function () {
+        var words, bits, dividerIndex, entropyBits, checksumBits, entropy, newChecksum;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    words = normalize(mnemonic).words;
+                    assert(words.length % 3 === 0, 'Invalid mnemonic');
+                    bits = words
+                        .map(function (word) {
+                        var index = wordlist.indexOf(word);
+                        assert(index !== -1, 'Invalid mnemonic');
+                        return padStart(index.toString(2), 11, '0');
+                    })
+                        .join('');
+                    dividerIndex = Math.floor(bits.length / 33) * 32;
+                    entropyBits = bits.slice(0, dividerIndex);
+                    checksumBits = bits.slice(dividerIndex);
+                    entropy = new Uint8Array(entropyBits.match(/(.{1,8})/g).map(binaryToByte));
+                    assertEntropy(entropy);
+                    return [4 /*yield*/, deriveChecksumBits(entropy)];
+                case 1:
+                    newChecksum = _a.sent();
+                    assert(newChecksum === checksumBits, 'Invalid checksum');
+                    return [2 /*return*/, entropy];
+            }
+        });
+    });
+}
+/**
+ * Converts raw entropy in form of byte array to mnemonic string.
+ * @param entropy byte array
+ * @param wordlist imported wordlist for specific language
+ * @returns 12-24 words
+ * @example
+ * const ent = new Uint8Array([
+ *   0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f,
+ *   0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f
+ * ]);
+ * await entropyToMnemonic(ent, wordlist);
+ * // 'legal winner thank year wave sausage worth useful legal winner thank yellow'
+ */
+function entropyToMnemonic(entropy, wordlist) {
+    return __awaiter(this, void 0, void 0, function () {
+        var entropyBits, checksumBits, bits, chunks, words;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    assertEntropy(entropy);
+                    entropyBits = bytesToBinary(entropy);
+                    return [4 /*yield*/, deriveChecksumBits(entropy)];
+                case 1:
+                    checksumBits = _a.sent();
+                    bits = entropyBits + checksumBits;
+                    chunks = bits.match(/(.{1,11})/g);
+                    words = chunks.map(function (binary) {
+                        var index = binaryToByte(binary);
+                        return wordlist[index];
+                    });
+                    return [2 /*return*/, words.join(isJapanese(wordlist) ? '\u3000' : ' ')];
+            }
+        });
+    });
+}
+/**
+ * Validates mnemonic for being 12-24 words contained in `wordlist`.
+ */
+function validateMnemonic(mnemonic, wordlist) {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 2, , 3]);
+                    return [4 /*yield*/, mnemonicToEntropy(mnemonic, wordlist)];
+                case 1:
+                    _a.sent();
+                    return [3 /*break*/, 3];
+                case 2:
+                    _a.sent();
+                    return [2 /*return*/, false];
+                case 3: return [2 /*return*/, true];
+            }
+        });
+    });
+}
+var salt = function (passphrase) { return nfkd("mnemonic".concat(passphrase)); };
+/**
+ * Uses KDF to derive 64 bytes of key data from mnemonic + optional password.
+ * @param mnemonic 12-24 words
+ * @param passphrase string that will additionally protect the key
+ * @returns 64 bytes of key data
+ * @example
+ * const mnem = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+ * await mnemonicToSeed(mnem, 'password');
+ * // new Uint8Array([...64 bytes])
+ */
+function mnemonicToSeed(mnemonic, passphrase) {
+    if (passphrase === void 0) { passphrase = ''; }
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2 /*return*/, pbkdf2('SHA-512', normalize(mnemonic).nfkd, salt(passphrase), 2048, 64)];
+        });
+    });
+}
+
+export { entropyToMnemonic, generateMnemonic, mnemonicToEntropy, mnemonicToSeed, validateMnemonic };

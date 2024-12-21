@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Scanner</title>
+  <script src="html5-qrcode.min.js"></script> <!-- Adjust the path if necessary -->
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      color: #4a90e2;
+      margin-bottom: 20px;
+    }
+
+    #qr-reader {
+      margin-bottom: 20px;
+    }
+
+    div {
+      margin-bottom: 15px;
+      width: 100%;
+      max-width: 500px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #357ab8;
+    }
+
+    output {
+      display: block;
+      padding: 10px;
+      background-color: #e9ecef;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="qr-reader" style="width:500px"></div>
+<div id="qr-reader-results"></div>
+
+<h1>Password Manager</h1>
+
+<!-- Text Inputs -->
+<div>
+  <label for="site">Site URL:</label>
+  <input type="text" id="site" placeholder="facebook.com">
+</div>
+
+<div>
+  <label for="entropyManualInput">Manual Entropy Input or Mnemonic:</label>
+  <input type="text" id="entropyManualInput" placeholder="Bip39 Words or whatever">
+</div>
+
+<!-- Buttons -->
+<div>
+  <button type="button" onclick="manualEntropyInput()">Press to Enter Entropy Manually</button>
+</div>
+
+<div>
+  <button type="button" onclick="showPassword()">Show Current Password</button>
+</div>
+
+<div>
+  <button type="button" onclick="newPassword()">Create and Show New Password</button>
+</div>
+
+<!-- Output Containers -->
+<div>
+  <label for="password">The Site Password is:</label>
+  <output id="password"></output>
+</div>
+  <div>
+  <button onclick="copyToClipboard('password')">Copy to Clipboard</button>
+</div>
+
+<div>
+  <label for="entropyInput">The Entropy Source is:</label>
+  <output id="entropyInput"></output><br><br>
+</div>
+<div>
+  <label for="nonce">The Nonce of Site:</label>
+  <output id="nonce"></output><br><br>
+</div>
+<script src="passwordManager.js"></script>
+</body>
+</html>
