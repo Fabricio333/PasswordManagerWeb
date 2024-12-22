@@ -77,7 +77,6 @@
 <body>
 
 <div id="qr-reader" style="width:500px"></div>
-<div id="qr-reader-results"></div>
 
 <h1>Password Manager</h1>
 
@@ -88,8 +87,8 @@
 </div>
 
 <div>
-  <label for="entropyManualInput">Manual Entropy Input or Mnemonic:</label>
-  <input type="text" id="entropyManualInput" placeholder="Bip39 Words or whatever">
+  <label for="entropyManualInput">BIP 39 Mnemonic:</label>
+  <input type="text" id="entropyManualInput" placeholder="about about about zoo">
 </div>
 
 <!-- Buttons -->
@@ -123,5 +122,8 @@
   <output id="nonce"></output><br><br>
 </div>
 <script src="passwordManager.js"></script>
+
+<script type="module" src="bip39WordList.js"></script>
+
 </body>
 </html>
