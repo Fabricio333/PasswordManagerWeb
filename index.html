@@ -1,129 +1,192 @@
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Scanner</title>
-  <script src="html5-qrcode.min.js"></script> <!-- Adjust the path if necessary -->
+  <title>Password Manager</title>
+  <script src="html5-qrcode.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f4f9;
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #4a90e2, #4e73df);
       color: #333;
       margin: 0;
-      padding: 20px;
+      padding: 0;
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background-color: #fff;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
     }
 
     h1 {
       color: #4a90e2;
-      margin-bottom: 20px;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 2rem;
     }
 
     #qr-reader {
-      margin-bottom: 20px;
+      margin: 20px 0;
     }
 
-    div {
-      margin-bottom: 15px;
-      width: 100%;
-      max-width: 500px;
+    .form-group {
+      margin-bottom: 25px;
     }
 
     label {
       display: block;
-      margin-bottom: 5px;
+      margin-bottom: 8px;
       font-weight: bold;
+      color: #555;
+      font-size: 1rem;
     }
 
     input[type="text"] {
       width: 100%;
-      padding: 10px;
+      padding: 12px;
       border: 1px solid #ccc;
-      border-radius: 5px;
-      box-sizing: border-box;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #4a90e2;
+      outline: none;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 30px; /* Added margin to separate from the next section */
     }
 
     button {
-      width: 100%;
-      padding: 10px;
-      background-color: #4a90e2;
+      padding: 12px;
+      background-color: #007bff;
       color: white;
       border: none;
-      border-radius: 5px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
       cursor: pointer;
-      font-size: 16px;
-      transition: background-color 0.3s;
+      transition: background-color 0.3s ease, transform 0.2s;
     }
 
     button:hover {
-      background-color: #357ab8;
+      background-color: #0056b3;
+      transform: scale(1.05);
+    }
+
+    button:disabled {
+      background-color: #ddd;
+      cursor: not-allowed;
+    }
+
+    .output-container {
+      background-color: #f4f6f8;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 10px;
+      font-size: 1rem;
+      color: #333;
+      word-wrap: break-word;
+    }
+
+    .output-label {
+      margin-top: 20px;
+      font-weight: bold;
     }
 
     output {
       display: block;
+      margin-top: 5px;
       padding: 10px;
-      background-color: #e9ecef;
+      background-color: #f9f9f9;
       border: 1px solid #ddd;
       border-radius: 5px;
-      margin-top: 5px;
+      font-size: 0.95rem;
+      color: #333;
+      word-wrap: break-word;
+    }
+
+    .form-group:last-of-type {
+      margin-bottom: 0; /* Remove bottom margin from the last form group */
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      button {
+        font-size: 0.9rem;
+        padding: 10px;
+      }
     }
   </style>
 </head>
+
 <body>
+<div class="container">
+  <h1>Password Manager</h1>
 
-<div id="qr-reader" style="width:500px"></div>
+  <!-- QR Code Scanner -->
+  <div id="qr-reader"></div>
 
-<h1>Password Manager</h1>
+  <!-- Form Section -->
+  <div class="form-group">
+    <label for="site">Site URL:</label>
+    <input type="text" id="site" placeholder="e.g., facebook.com">
+  </div>
 
-<!-- Text Inputs -->
-<div>
-  <label for="site">Site URL:</label>
-  <input type="text" id="site" placeholder="facebook.com">
+  <div class="form-group">
+    <label for="entropyManualInput">BIP 39 Mnemonic:</label>
+    <input type="text" id="entropyManualInput" placeholder="e.g., about about about zoo">
+  </div>
+
+  <div class="actions">
+    <button type="button" onclick="manualEntropyInput()">Enter Entropy Manually</button>
+    <button type="button" onclick="showPassword()">Show Current Password</button>
+    <button type="button" onclick="newPassword()">Generate New Password</button>
+  </div>
+
+  <!-- Outputs -->
+  <div class="form-group">
+    <label for="password">The Site Password is:</label>
+    <output id="password"></output>
+    <button onclick="copyPasswordToClipboard()">Copy to Clipboard</button>
+  </div>
+
+  <div class="form-group">
+    <label for="entropyInput">The Entropy Source is:</label>
+    <output id="entropyInput"></output>
+  </div>
+
+  <div class="form-group">
+    <label for="nonce">The Nonce of Site:</label>
+    <output id="nonce"></output>
+    <button onclick="resetNonces()">Reset Nonces</button>
+  </div>
 </div>
 
-<div>
-  <label for="entropyManualInput">BIP 39 Mnemonic:</label>
-  <input type="text" id="entropyManualInput" placeholder="about about about zoo">
+<div class="form-group">
 </div>
-
-<!-- Buttons -->
-<div>
-  <button type="button" onclick="manualEntropyInput()">Press to Enter Entropy Manually</button>
-</div>
-
-<div>
-  <button type="button" onclick="showPassword()">Show Current Password</button>
-</div>
-
-<div>
-  <button type="button" onclick="newPassword()">Create and Show New Password</button>
-</div>
-
-<!-- Output Containers -->
-<div>
-  <label for="password">The Site Password is:</label>
-  <output id="password"></output>
-</div>
-  <div>
-  <button onclick="copyToClipboard('password')">Copy to Clipboard</button>
-</div>
-
-<div>
-  <label for="entropyInput">The Entropy Source is:</label>
-  <output id="entropyInput"></output><br><br>
-</div>
-<div>
-  <label for="nonce">The Nonce of Site:</label>
-  <output id="nonce"></output><br><br>
-</div>
+<script src="bip39WordList.js"></script>
 <script src="passwordManager.js"></script>
 
-<script type="module" src="bip39WordList.js"></script>
-
 </body>
+
 </html>
