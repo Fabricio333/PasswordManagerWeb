@@ -17,13 +17,11 @@ function onScanSuccess(decodedText, decodedResult) {
         // resultContainer.innerText = `Scan result ${decodedText}`;
         entropyInput.value = DecimalStringToHex(decodedText);
         document.getElementById('entropyManualInput').value = indicesToWords(decodedText)
-
+        // QR Code Input Not Verifying the mnemonic
 
 }
 
 function manualEntropyInput(){
-    console.log('palabras ingresadas',entropyManualInput.value)
-    console.log('aca', entropyManualInput.value)
     const seedPhrase = entropyManualInput.value
         verifyBip39SeedPhrase(seedPhrase, words).then(isValid => {
         console.log(isValid);
@@ -150,10 +148,6 @@ function copyPasswordToClipboard(where) {
     });
 }
 
-function main(){
-    html5QrcodeScanner.render(onScanSuccess);
-    }
-
 // Function to load the dictionary from local storage
 function loadDictionary(key) {
     // Check if the key exists in localStorage
@@ -171,18 +165,6 @@ function saveDictionary(key, dictionary) {
     // Convert the dictionary to a JSON string and save it in localStorage
     localStorage.setItem(key, JSON.stringify(dictionary));
     console.log('Dict Saved')
-}
-
-// Function to update a key-value pair in the dictionary
-function updateDictionary(key, newKey, newValue) {
-    // Load the current dictionary
-    let dictionary = loadDictionary(key);
-
-    // Update the dictionary with the new key-value pair
-    dictionary[newKey] = newValue;
-
-    // Save the updated dictionary back to localStorage
-    saveDictionary(key, dictionary);
 }
 
 function indicesToWords(indexString) {
@@ -225,7 +207,6 @@ function wordsToIndices(inputWords) {
         return index.toString().padStart(4, '0');
     }).join('');
 }
-
 
 async function verifyBip39SeedPhrase(seedPhrase, wordlist) {
     /**
@@ -292,4 +273,17 @@ function deleteLocalStorageVariable(key) {
 function resetNonces(){
     deleteLocalStorageVariable("nonces")
 }
+
+function pushNoncesToCloud(){
+    // Encrypt nonces file to cloud
+}
+function pullNoncesFromCloud(){
+    // Decrypt nonces file to cloud
+
+}
+
+function main(){
+    html5QrcodeScanner.render(onScanSuccess);
+}
+
 main()
