@@ -1,38 +1,25 @@
-var password = document.getElementById('password')
-var site = document.getElementById('site')
-var entropyInput = document.getElementById('entropyInput')
-var nonce = document.getElementById('nonce')
-var lastResult, countResults = 0;
-var entropyManualInput = document.getElementById('entropyManualInput')
+var passwordField = document.getElementById('password')
+var siteField = document.getElementById('site')
+var nonceField = document.getElementById('nonce')
+var mnemonicField = document.getElementById('mnemonicField')
+var userOrMailField = document.getElementById('userOrMail')
+var privateKeyField = document.getElementById('privateKey')
+var settingsField = document.getElementById('settings')
+
+function setMnemonic(mnemonic) {
+    document.getElementById("mnemonicField").value = mnemonic
+}
+
 var html5QrcodeScanner = new Html5QrcodeScanner(
     "qr-reader", { fps: 10, qrbox: 250 });
-
 function onScanSuccess(decodedText, decodedResult) {
-    // if (decodedText !== lastResult) {}
-        ++countResults;
         lastResult = decodedText; // interesante esto del last result para mejorar la funcionalidad al repetir
         // Handle on success condition with the decoded message.
         console.log(`Scan result ${decodedText}`, decodedResult);
         // Display the result in the results container and scan result output
         // resultContainer.innerText = `Scan result ${decodedText}`;
         entropyInput.value = DecimalStringToHex(decodedText);
-        document.getElementById('entropyManualInput').value = indicesToWords(decodedText)
-        // QR Code Input Not Verifying the mnemonic
-
-}
-
-function manualEntropyInput(){
-    const seedPhrase = entropyManualInput.value
-        verifyBip39SeedPhrase(seedPhrase, words).then(isValid => {
-        console.log(isValid);
-        if(isValid){
-            entropyInput.value = DecimalStringToHex(wordsToIndices(entropyManualInput.value));
-        }
-        else{
-            alert('The Seed Phrase is Not Valid');
-            throw new Error(`Checksum not valid`);
-        }
-    });
+        setMnemonic(indicesToWords(decodedText))
 }
 
 async function hashString(stringToHash) {
@@ -76,40 +63,48 @@ function DecimalStringToHex(DecimalString) {
     return hexadecimal;
 }
 
-function showPassword() {
+async function showPassword() {
     // Load the nonces dictionary from local storage
     let nonces = loadDictionary('nonces');
-    console.log('1')
+
     // Check if the site input is empty
-    if (!site.value) {
-        password.value = 'The site input is empty';
-        console.log('entramo aca')
-        console.log('2')
+    if (!siteField.value) {
+        alert('The site input is empty');
         return;
     }
-    // Check if the entropy input is empty
-    if (!entropyInput.value) {
-        console.log('3')
-        password.value = 'The entropy input is empty';
+    if (!mnemonicField.value) {
+        alert('The mnemonic input is empty');
         return;
     }
+
+    try {
+        const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
+        if (isValid) {
+            privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));
+        } else {
+            alert('The Seed Phrase is not valid');
+            throw new Error('Checksum not valid');
+        }
+    } catch (error) {
+        console.error('An error occurred:', error);
+    }
+
     // Initialize or load the nonce for the site
     if (!nonces[site.value]) {
         nonces[site.value] = 0;
-        console.log('4')
         console.log(`Initialized nonce for site: ${site.value} el nonce es: ${nonces[site.value]}`);
         saveDictionary('nonces', nonces);
     } else {
         console.log(`Loaded nonce for site: ${site.value} = ${nonces[site.value]}`);
     }
 
-    nonce.value = nonces[site.value];
+    nonceField.value = nonces[site.value];
 
-    // Generate password
-    const concatenado = entropyInput.value + '@' + site.value + "/" + nonce.value ;
-    console.log(concatenado);
+    const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonce.value ;
+
+    alert(concatenado)
     hashString(concatenado).then(resultado => {
-        const entropiaContraseña = resultado.substring(0, 8);
+        const entropiaContraseña = resultado.substring(0, 16);
         password.value = 'PASS' + entropiaContraseña + '249+';
     }).catch(error => {
         console.error('Error hashing the string:', error);
@@ -119,11 +114,10 @@ function showPassword() {
 
 function newPassword(){
     const nonces = loadDictionary('nonces')
-    console.log('a ver si se estan cargando los nonces aca',nonces)
     // Check if there is a nonce already
-    if(nonces[site.value] != null){
-        let integerValue = +nonces[site.value]
-        nonces[site.value] = integerValue + 1
+    if(nonces[siteField.value] != null){
+        let integerValue = +nonces[siteField.value]
+        nonces[siteField.value] = integerValue + 1
         saveDictionary('nonces',nonces)
         showPassword()
     }
@@ -133,22 +127,20 @@ function newPassword(){
     }
 }
 
-function copyPasswordToClipboard(where) {
-    var outputText = document.getElementById('password');
-    if (!outputText.value) {
-        alert("Password cannot be empty!");
+function copyElementToClipboard(element) {
+    var outputText = document.getElementById(element);
+    if (!outputText) {
+        alert("Selected text is empty!");
         return false;
     }
     navigator.clipboard.writeText(outputText.textContent).then(
         function() {
-        alert('Password copied to clipboard!');
+        alert('Copied Succesfully to clipboard!');
     },
         function() {
         alert('Failed to copy text.');
     });
 }
-
-// Function to load the dictionary from local storage
 function loadDictionary(key) {
     // Check if the key exists in localStorage
     const storedData = localStorage.getItem(key);
@@ -160,7 +152,6 @@ function loadDictionary(key) {
     }
 }
 
-// Function to save the dictionary to local storage
 function saveDictionary(key, dictionary) {
     // Convert the dictionary to a JSON string and save it in localStorage
     localStorage.setItem(key, JSON.stringify(dictionary));
@@ -272,18 +263,89 @@ function deleteLocalStorageVariable(key) {
 
 function resetNonces(){
     deleteLocalStorageVariable("nonces")
+    alert("Nonces Reseted Succesfully")
+}
+
+function resetSettings(){
+    deleteLocalStorageVariable("settings")
+    alert("Settings Reseted Succesfully")
 }
 
 function pushNoncesToCloud(){
     // Encrypt nonces file to cloud
 }
+
 function pullNoncesFromCloud(){
     // Decrypt nonces file to cloud
+
+}
+
+function exportSettings(){
+    document.getElementById('settings').value = loadDictionary('settings')
+    copyElementToClipboard('settingsField')
+}
+
+function generateValidMnemonic() {
+    if (words.length !== 2048) {
+        throw new Error("The wordlist must contain exactly 2048 words.");
+    }
+
+    // Step 1: Generate cryptographically secure random entropy
+    function generateEntropy(bytes = 16) {
+        if (window.crypto && window.crypto.getRandomValues) {
+            const entropy = new Uint8Array(bytes);
+            window.crypto.getRandomValues(entropy);
+            return entropy;
+        } else {
+            throw new Error("Secure random generation not supported in this browser.");
+        }
+    }
+
+    // Step 2: Convert entropy to binary string
+    function entropyToBinary(entropy) {
+        return Array.from(entropy)
+            .map(byte => byte.toString(2).padStart(8, "0"))
+            .join("");
+    }
+
+    // Step 3: Generate checksum (Fixed to handle async digest)
+    async function generateChecksum(entropy) {
+        const hashBuffer = await window.crypto.subtle.digest("SHA-256", entropy);
+        const hashArray = new Uint8Array(hashBuffer);
+        const hashBinary = Array.from(hashArray)
+            .map(byte => byte.toString(2).padStart(8, "0"))
+            .join("");
+        const checksumBits = (entropy.length * 8) / 32; // Entropy length in bits / 32
+        return hashBinary.substring(0, checksumBits);
+    }
+
+    // Step 4: Convert binary to mnemonic words
+    function binaryToMnemonic(binary, wordlist) {
+        const words = [];
+        for (let i = 0; i < binary.length; i += 11) {
+            const index = parseInt(binary.slice(i, i + 11), 2);
+            words.push(wordlist[index]);
+        }
+        return words.join(" ");
+    }
+
+    // Generate the mnemonic
+    return (async () => {
+        const entropy = generateEntropy();
+        const entropyBinary = entropyToBinary(entropy);
+        const checksum = await generateChecksum(entropy); // Await the async checksum
+        const mnemonicBinary = entropyBinary + checksum;
+        var mnemonic = binaryToMnemonic(mnemonicBinary, words)
+        setMnemonic(mnemonic)
+        return;
+    })();
+    // Example usage generateValidMnemonic().then(mnemonic => console.log("Generated Mnemonic:", mnemonic)).catch(console.error);
 
 }
 
 function main(){
     html5QrcodeScanner.render(onScanSuccess);
 }
+
 
 main()

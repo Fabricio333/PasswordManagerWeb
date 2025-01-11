@@ -5,7 +5,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Password Manager</title>
-  <script src="html5-qrcode.min.js"></script>
   <style>
     body {
       font-family: 'Roboto', sans-serif;
@@ -148,17 +147,22 @@
 
   <!-- Form Section -->
   <div class="form-group">
+    <label for="userOrMail">Optional Username or eMail, default empty:</label>
+    <input type="text" id="userOrMail" placeholder="Bob123 or bob@bitcoin.com">
+  </div>
+
+  <!-- Form Section -->
+  <div class="form-group">
     <label for="site">Site URL:</label>
     <input type="text" id="site" placeholder="e.g., facebook.com">
   </div>
 
   <div class="form-group">
-    <label for="entropyManualInput">BIP 39 Mnemonic:</label>
-    <input type="text" id="entropyManualInput" placeholder="e.g., about about about zoo">
+    <label for="mnemonicField">BIP 39 Mnemonic:</label>
+    <input type="text" id="mnemonicField" placeholder="e.g., about about about zoo">
   </div>
 
   <div class="actions">
-    <button type="button" onclick="manualEntropyInput()">Enter Entropy Manually</button>
     <button type="button" onclick="showPassword()">Show Current Password</button>
     <button type="button" onclick="newPassword()">Generate New Password</button>
   </div>
@@ -167,49 +171,140 @@
   <div class="form-group">
     <label for="password">The Site Password is:</label>
     <output id="password"></output>
-    <button onclick="copyPasswordToClipboard()">Copy to Clipboard</button>
+  </div>
+
+  <div class="actions">
+    <button type="button" onclick="copyElementToClipboard('password')">Copy Password to Clipboard</button>
   </div>
 
   <div class="form-group">
-    <label for="entropyInput">The Entropy Source is:</label>
-    <output id="entropyInput"></output>
+    <label for="privateKey">The Private Key Is:</label>
+    <output id="privateKey"></output>
   </div>
 
   <div class="form-group">
     <label for="nonce">The Nonce of Site:</label>
     <output id="nonce"></output>
-    <button onclick="resetNonces()">Reset Nonces</button>
   </div>
+  <div class="actions">
+  <button onclick="resetNonces()">Reset Nonces</button>
+  </div>
+  <div class="actions">
+  <!-- Settings toggle button -->
+  <button onclick="toggleSettings()" class="form-group" style="margin-bottom: 0;">Toggle Settings</button>
+  </div>
+
+  <!-- Container element -->
+  <div id="toggle-container" style="display: none;">
+    <!-- All your HTML elements here... -->
+    <div class="actions">
+      <button onclick="generateValidMnemonic()" class="form-group">Generate Mnemonic</button>
+    </div>
+  <!-- Load Nonces and Settings -->
+  <div class="form-group">
+    <h2>Load Nonces and Settings</h2>
+    <p>Please enter the nonces backup and or the desired settings(json format):</p>
+    <input type="text" id="settings" placeholder="Enter json content">
+  </div>
+
+  <div class="actions">
+    <button onclick="importSettings()">Import</button>
+    <button onclick="exportSettings()">Export</button>
+  </div>
+
+  <!-- Settings -->
+  <div class="form-group">
+  <h2>Settings</h2>
+  <p>Please select your desired settings:</p>
+  <!-- Enable Uppercase Letters checkbox -->
+  <label for="enableUppercase">Enable Uppercase Letters</label>
+  <input type="checkbox" id="enableUppercase" name="settings" checked style="margin-bottom: 20px;">
+
+  <!-- Enable Numbers checkbox -->
+  <label for="enableNumbers">Enable Numbers</label>
+  <input type="checkbox" id="enableNumbers" name="settings" checked style="margin-bottom: 20px;">
+
+  <!-- Enable Symbols checkbox -->
+  <label for="enableSymbols">Enable Symbols</label>
+  <input type="checkbox" id="enableSymbols" name="settings" style="margin-bottom: 20px;">
+
+  <!-- Exclude Similar Characters checkbox -->
+  <label for="excludeSimilarCharacters">Exclude Similar Characters (e.g., i, l, 1, O, 0)</label>
+  <input type="checkbox" id="excludeSimilarCharacters" name="settings" style="margin-bottom: 20px;">
+</div>
+
+
+  <!-- Save Settings button -->
+  <button onclick="saveSettings()">Save Settings</button>
+
+  <!-- Outputs for settings -->
+<div class="form-group">
+    <label for="passwordLength">Enable Uppercase Letters:</label>
+    <output id="enableUppercaseOutput"><input type="checkbox" id="enableUppercaseOutputInput"></output>
 </div>
 
 <div class="form-group">
-  <label for="settings">Select Settings:</label>
-  <div>
-    <label>
-      <input type="checkbox" id="enableUppercase" name="settings"> Enable Uppercase Letters
-    </label>
-  </div>
-  <div>
-    <label>
-      <input type="checkbox" id="enableNumbers" name="settings"> Enable Numbers
-    </label>
-  </div>
-  <div>
-    <label>
-      <input type="checkbox" id="enableSymbols" name="settings"> Enable Symbols
-    </label>
-  </div>
-  <div>
-    <label>
-      <input type="checkbox" id="excludeSimilarCharacters" name="settings"> Exclude Similar Characters (e.g., i, l, 1, O, 0)
-    </label>
-  </div>
+    <label for="passwordLength">Enable Numbers:</label>
+    <output id="enableNumbersOutput"><input type="checkbox" id="enableNumbersOutputInput"></output>
 </div>
 
+<div class="form-group">
+    <label for="passwordLength">Enable Symbols:</label>
+    <output id="enableSymbolsOutput"><input type="checkbox" id="enableSymbolsOutputInput"></output>
+</div>
 
-<script src="bip39WordList.js"></script>
-<script src="passwordManager.js"></script>
+<div class="form-group">
+    <label for="passwordLength">Exclude Similar Characters:</label>
+    <output id="excludeSimilarCharactersOutput"><input type="checkbox" id="excludeSimilarCharactersOutputInput"></output>
+</div>
+
+  <!-- Password Length slider -->
+  <div class="form-group">
+    <h2>Password Length</h2>
+    <p>Please select your desired password length:</p>
+    <input type="range" id="passwordLength" min="8" max="128" value="32" style="width: 80%; margin-bottom: 20px;">
+    <output id="passwordLengthOutput">32</output>
+    <!-- Outputs for password length -->
+    <div class="form-group">
+      <label for="passwordLength">The selected Password Length is:</label>
+      <output id="selectedPasswordLength"></output>
+    </div>
+  </div>
+
+  <!-- Minimum Similarity slider -->
+  <div class="form-group">
+    <h2>Minimum Similarity</h2>
+    <p>Please select your desired minimum similarity:</p>
+    <input type="range" id="minSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
+    <output id="minSimilarityOutput">5</output>
+    <!-- Outputs for minimum similarity -->
+    <div class="form-group">
+      <label for="minSimilarity">The selected Minimum Similarity is:</label>
+      <output id="selectedMinSimilarity"></output>
+    </div>
+  </div>
+
+  <!-- Maximum Similarity slider -->
+  <div class="form-group">
+    <h2>Maximum Similarity</h2>
+    <p>Please select your desired maximum similarity:</p>
+    <input type="range" id="maxSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
+    <output id="maxSimilarityOutput">5</output>
+    <!-- Outputs for maximum similarity -->
+    <div class="form-group">
+      <label for="maxSimilarity">The selected Maximum Similarity is:</label>
+      <output id="selectedMaxSimilarity"></output>
+    </div>
+  </div>
+  </div>
 
 </body>
 
-</html>
+<script src="html5-qrcode.min.js"></script>
+<script src="bip39WordList.js"></script>
+<script src="ui.js"></script>
+<script src="passwordManager.js"></script>
+
+
+</body>
+
