@@ -281,26 +281,22 @@ function pullNoncesFromCloud(){
 
 }
 
-function exportSettings(){
+function exportSettings() {
     var nonces = loadDictionary('nonces')
     console.log(nonces)
-    var settings = JSON.stringify(nonces,null,4)
-    if(Object.keys(nonces).length > 0) {
+    var settings = JSON.stringify(nonces, null, 4)
+    if (Object.keys(nonces).length > 0) {
         document.getElementById('settings').value = settings
         copyElementToClipboard('settings')
-    } else{
+    } else {
         document.getElementById('settings').value = ""
     }
-
-
 }
-function setSettings(settings){
-    saveDictionary('nonces',settings)
-}
+
 function importSettings(){
     var settings = document.getElementById('settings')
+    saveDictionary('nonces',settings)
     alert("Local Stored Settings Imported")
-    setSettings(settings)
 }
 
 function generateValidMnemonic() {
@@ -372,3 +368,4 @@ function main(){
 
 
 main()
+
