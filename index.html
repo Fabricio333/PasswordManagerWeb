@@ -34,12 +34,14 @@
       font-size: 2rem;
     }
 
-    #qr-reader {
-      margin: 20px 0;
-    }
-
     .form-group {
-      margin-bottom: 25px;
+      /* Adding a margin bottom to each form group */
+            margin-bottom: 20px;
+        }
+    /* Removing the bottom margin from the last form group,
+       so it doesn't overlap with the container's padding */
+    .form-group:last-of-type {
+      margin-bottom: 0; /* This will remove any extra space at the end of the form */
     }
 
     label {
@@ -121,66 +123,110 @@
       word-wrap: break-word;
     }
 
-    .form-group:last-of-type {
-      margin-bottom: 0; /* Remove bottom margin from the last form group */
-    }
 
     @media (max-width: 768px) {
       h1 {
         font-size: 1.5rem;
       }
 
-      button {
-        font-size: 0.9rem;
-        padding: 10px;
-      }
+            button {
+                font-size: 0.9rem;
+                padding: 10px;
+            }
+        }
+
+    /* Add a toggle container with a flexbox layout */
+        #toggle-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+    /* Style the toggle button and its associated content */
+    .toggle-button {
+      padding: 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.2s;
     }
-  </style>
+
+    .toggle-button:hover {
+      background-color: #0056b3;
+      transform: scale(1.05);
+    }
+
+    .toggle-content {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f4f6f8;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    /* Make the toggle content visible when the toggle button is clicked */
+    .toggle-content.show {
+      display: block;
+    }
+    </style>
 </head>
 
 <body>
 <div class="container">
-  <h1>Password Manager</h1>
+    <h1>Password Manager</h1>
 
-  <!-- QR Code Scanner -->
-  <div id="qr-reader"></div>
+    <!-- QR Code Scanner -->
+    <div class="qr-reader-container">
+        <div id="qr-reader"></div>
+    </div>
 
-  <!-- Form Section -->
-  <div class="form-group">
-    <label for="userOrMail">Optional Username or eMail, default empty:</label>
-    <input type="text" id="userOrMail" placeholder="Bob123 or bob@bitcoin.com">
-  </div>
+    <!-- Form Section -->
+    <form>
+        <div class="form-group">
+            <label for="userOrMail">Optional Username or eMail, default empty:</label>
+            <input type="text" id="userOrMail" placeholder="Bob123 or bob@bitcoin.com">
+        </div>
 
-  <!-- Form Section -->
-  <div class="form-group">
-    <label for="site">Site URL:</label>
-    <input type="text" id="site" placeholder="e.g., facebook.com">
-  </div>
+        <div class="form-group">
+            <label for="site">Site URL:</label>
+            <input type="text" id="site" placeholder="e.g., facebook.com">
+        </div>
 
-  <div class="form-group">
-    <label for="mnemonicField">BIP 39 Mnemonic:</label>
-    <input type="text" id="mnemonicField" placeholder="e.g., about about about zoo">
-  </div>
+        <div class="form-group">
+            <label for="mnemonicField">BIP 39 Mnemonic:</label>
+            <textarea id="mnemonicField" placeholder="e.g., about about about zoo" autocorrect="off" spellcheck="false" rows="3"></textarea>
+        </div>
 
-  <div class="actions">
-    <button type="button" onclick="showPassword()">Show Current Password</button>
-    <button type="button" onclick="newPassword()">Generate New Password</button>
-  </div>
+        <!-- Buttons Section -->
+        <div class="actions">
+            <button type="button" onclick="showPassword()">Show Current Password</button>
+            <button type="button" onclick="newPassword()">Generate New Password</button>
+        </div>
 
-  <!-- Outputs -->
-  <div class="form-group">
-    <label for="password">The Site Password is:</label>
-    <output id="password"></output>
-  </div>
+        <!-- Outputs -->
+        <div class="form-group">
+            <div class="output-container">
+                <label for="password">The Site Password is:</label>
+                <output id="password"></output>
+            </div>
+        </div>
 
   <div class="actions">
     <button type="button" onclick="copyElementToClipboard('password')">Copy Password to Clipboard</button>
   </div>
 
-  <div class="form-group">
-    <label for="privateKey">The Private Key Is:</label>
-    <output id="privateKey"></output>
-  </div>
+        <div class="form-group">
+            <div class="output-container">
+                <label for="privateKey">The Private Key Is:</label>
+                <output id="privateKey"></output>
+            </div>
+        </div>
 
   <div class="form-group">
     <label for="nonce">The Nonce of Site:</label>
@@ -188,13 +234,14 @@
   </div>
   <div class="actions">
   <button onclick="resetNonces()">Reset Nonces</button>
-  </div>
-  <div class="actions">
-  <!-- Settings toggle button -->
-  <button onclick="toggleSettings()" class="form-group" style="margin-bottom: 0;">Toggle Settings</button>
-  </div>
 
-  <!-- Container element -->
+      <div class="actions">
+            <!-- Settings toggle button -->
+            <button type= "button" onclick="toggleSettings()" class="form-group" style="margin-bottom: 0;">Toggle Settings</button>
+        </div>
+
+
+        <!-- Container element -->
   <div id="toggle-container" style="display: none;">
     <!-- All your HTML elements here... -->
     <div class="actions">
@@ -297,14 +344,15 @@
     </div>
   </div>
   </div>
+  </div>
+    </form>
+</div>
 
-</body>
 
 <script src="html5-qrcode.min.js"></script>
 <script src="bip39WordList.js"></script>
 <script src="ui.js"></script>
 <script src="passwordManager.js"></script>
 
-
 </body>
-
+</html>

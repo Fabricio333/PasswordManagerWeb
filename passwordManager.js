@@ -102,7 +102,7 @@ async function showPassword() {
 
     const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonce.value ;
 
-    alert(concatenado)
+    console.log(concatenado)
     hashString(concatenado).then(resultado => {
         const entropiaContraseña = resultado.substring(0, 16);
         password.value = 'PASS' + entropiaContraseña + '249+';
@@ -122,17 +122,17 @@ function newPassword(){
         showPassword()
     }
     else{
-        console.log("there is no nonce for that website, first password shown")
+        console.log("there is no previous nonce for that website")
         showPassword()
     }
 }
 
 function copyElementToClipboard(element) {
     var outputText = document.getElementById(element);
-    if (!outputText) {
+if (outputText && !outputText.value.trim()) { // Check if selected text is empty or null
         alert("Selected text is empty!");
         return false;
-    }
+}
     navigator.clipboard.writeText(outputText.textContent).then(
         function() {
         alert('Copied Succesfully to clipboard!');
@@ -141,6 +141,7 @@ function copyElementToClipboard(element) {
         alert('Failed to copy text.');
     });
 }
+
 function loadDictionary(key) {
     // Check if the key exists in localStorage
     const storedData = localStorage.getItem(key);
@@ -281,8 +282,25 @@ function pullNoncesFromCloud(){
 }
 
 function exportSettings(){
-    document.getElementById('settings').value = loadDictionary('settings')
-    copyElementToClipboard('settingsField')
+    var nonces = loadDictionary('nonces')
+    console.log(nonces)
+    var settings = JSON.stringify(nonces,null,4)
+    if(Object.keys(nonces).length > 0) {
+        document.getElementById('settings').value = settings
+        copyElementToClipboard('settings')
+    } else{
+        document.getElementById('settings').value = ""
+    }
+
+
+}
+function setSettings(settings){
+    saveDictionary('nonces',settings)
+}
+function importSettings(){
+    var settings = document.getElementById('settings')
+    alert("Local Stored Settings Imported")
+    setSettings(settings)
 }
 
 function generateValidMnemonic() {
@@ -342,6 +360,11 @@ function generateValidMnemonic() {
     // Example usage generateValidMnemonic().then(mnemonic => console.log("Generated Mnemonic:", mnemonic)).catch(console.error);
 
 }
+
+// Check inputs with common sites list
+function checkSiteInput(){}
+
+function checkEmailInput(){}
 
 function main(){
     html5QrcodeScanner.render(onScanSuccess);
