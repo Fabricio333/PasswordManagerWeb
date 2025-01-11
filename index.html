@@ -53,17 +53,27 @@
     }
 
     input[type="text"] {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 1rem;
-      transition: border-color 0.3s;
+        width: 100%; /* Ensures the input fields span the width of their container */
+        max-width: 100%; /* Prevents input fields from escaping the container's limits */
+        padding: 12px; /* Uniform padding for consistent spacing inside the field */
+        border: 1px solid #ccc; /* Matches the visual style of other elements */
+        border-radius: 8px; /* Matches button border-radius */
+        font-size: 1rem; /* Consistent text size */
+        transition: border-color 0.3s; /* Smooth transition on focus */
+        box-sizing: border-box; /* Ensures padding and border are included in the width */
     }
 
     input[type="text"]:focus {
-      border-color: #4a90e2;
-      outline: none;
+        border-color: #4a90e2; /* Highlighted border on focus */
+        outline: none; /* Removes default browser outline */
+    }
+
+    .form-group {
+        margin-bottom: 20px; /* Adds space between form groups */
+    }
+
+    .form-group:last-of-type {
+        margin-bottom: 0; /* Removes extra spacing after the last input */
     }
 
     .actions {
@@ -174,6 +184,35 @@
     .toggle-content.show {
       display: block;
     }
+    textarea {
+        width: 100%; /* Ensure the textarea spans the container width */
+        max-width: 100%; /* Prevent overflow beyond the container */
+        padding: 12px; /* Match the padding of input fields */
+        border: 1px solid #ccc; /* Match the border style */
+        border-radius: 8px; /* Match the rounded corners */
+        font-size: 1rem; /* Ensure consistent font size */
+        line-height: 1.5; /* Improves readability for multiline text */
+        resize: none; /* Allow users to resize vertically only */
+        transition: border-color 0.3s; /* Smooth transition on focus */
+        box-sizing: border-box; /* Include padding and border in size */
+        background-color: #fff; /* Match input background color */
+        font-family: inherit;
+    }
+
+    textarea:focus {
+        border-color: #4a90e2; /* Highlighted border on focus */
+        outline: none; /* Removes default outline */
+    }
+
+    .form-group textarea {
+        margin-bottom: 20px; /* Match spacing for form group */
+    }
+
+    textarea[autocorrect="off"][spellcheck="false"] {
+        /* Optional: Specific style for secure fields */
+        color: #333; /* Consistent text color */
+        background-color: #fff; /* Avoid unintended appearance */
+    }
     </style>
 </head>
 
@@ -228,12 +267,14 @@
             </div>
         </div>
 
-  <div class="form-group">
-    <label for="nonce">The Nonce of Site:</label>
-    <output id="nonce"></output>
-  </div>
+        <div class="form-group">
+          <div class="output-container">
+            <label for="nonce">The Nonce of Site:</label>
+            <output id="nonce"></output>
+          </div>
+        </div>
   <div class="actions">
-  <button onclick="resetNonces()">Reset Nonces</button>
+  <button type="button" onclick="resetNonces()">Reset Nonces</button>
 
       <div class="actions">
             <!-- Settings toggle button -->
@@ -245,7 +286,7 @@
   <div id="toggle-container" style="display: none;">
     <!-- All your HTML elements here... -->
     <div class="actions">
-      <button onclick="generateValidMnemonic()" class="form-group">Generate Mnemonic</button>
+      <button type= "button" onclick="generateValidMnemonic()" class="form-group">Generate Mnemonic</button>
     </div>
   <!-- Load Nonces and Settings -->
   <div class="form-group">
@@ -255,99 +296,13 @@
   </div>
 
   <div class="actions">
-    <button onclick="importSettings()">Import</button>
-    <button onclick="exportSettings()">Export</button>
-  </div>
-
-  <!-- Settings -->
-  <div class="form-group">
-  <h2>Settings</h2>
-  <p>Please select your desired settings:</p>
-  <!-- Enable Uppercase Letters checkbox -->
-  <label for="enableUppercase">Enable Uppercase Letters</label>
-  <input type="checkbox" id="enableUppercase" name="settings" checked style="margin-bottom: 20px;">
-
-  <!-- Enable Numbers checkbox -->
-  <label for="enableNumbers">Enable Numbers</label>
-  <input type="checkbox" id="enableNumbers" name="settings" checked style="margin-bottom: 20px;">
-
-  <!-- Enable Symbols checkbox -->
-  <label for="enableSymbols">Enable Symbols</label>
-  <input type="checkbox" id="enableSymbols" name="settings" style="margin-bottom: 20px;">
-
-  <!-- Exclude Similar Characters checkbox -->
-  <label for="excludeSimilarCharacters">Exclude Similar Characters (e.g., i, l, 1, O, 0)</label>
-  <input type="checkbox" id="excludeSimilarCharacters" name="settings" style="margin-bottom: 20px;">
-</div>
-
-
-  <!-- Save Settings button -->
-  <button onclick="saveSettings()">Save Settings</button>
-
-  <!-- Outputs for settings -->
-<div class="form-group">
-    <label for="passwordLength">Enable Uppercase Letters:</label>
-    <output id="enableUppercaseOutput"><input type="checkbox" id="enableUppercaseOutputInput"></output>
-</div>
-
-<div class="form-group">
-    <label for="passwordLength">Enable Numbers:</label>
-    <output id="enableNumbersOutput"><input type="checkbox" id="enableNumbersOutputInput"></output>
-</div>
-
-<div class="form-group">
-    <label for="passwordLength">Enable Symbols:</label>
-    <output id="enableSymbolsOutput"><input type="checkbox" id="enableSymbolsOutputInput"></output>
-</div>
-
-<div class="form-group">
-    <label for="passwordLength">Exclude Similar Characters:</label>
-    <output id="excludeSimilarCharactersOutput"><input type="checkbox" id="excludeSimilarCharactersOutputInput"></output>
-</div>
-
-  <!-- Password Length slider -->
-  <div class="form-group">
-    <h2>Password Length</h2>
-    <p>Please select your desired password length:</p>
-    <input type="range" id="passwordLength" min="8" max="128" value="32" style="width: 80%; margin-bottom: 20px;">
-    <output id="passwordLengthOutput">32</output>
-    <!-- Outputs for password length -->
-    <div class="form-group">
-      <label for="passwordLength">The selected Password Length is:</label>
-      <output id="selectedPasswordLength"></output>
-    </div>
-  </div>
-
-  <!-- Minimum Similarity slider -->
-  <div class="form-group">
-    <h2>Minimum Similarity</h2>
-    <p>Please select your desired minimum similarity:</p>
-    <input type="range" id="minSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
-    <output id="minSimilarityOutput">5</output>
-    <!-- Outputs for minimum similarity -->
-    <div class="form-group">
-      <label for="minSimilarity">The selected Minimum Similarity is:</label>
-      <output id="selectedMinSimilarity"></output>
-    </div>
-  </div>
-
-  <!-- Maximum Similarity slider -->
-  <div class="form-group">
-    <h2>Maximum Similarity</h2>
-    <p>Please select your desired maximum similarity:</p>
-    <input type="range" id="maxSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
-    <output id="maxSimilarityOutput">5</output>
-    <!-- Outputs for maximum similarity -->
-    <div class="form-group">
-      <label for="maxSimilarity">The selected Maximum Similarity is:</label>
-      <output id="selectedMaxSimilarity"></output>
-    </div>
+    <button type= "button" onclick="importSettings()">Import</button>
+    <button type= "button" onclick="exportSettings()">Export</button>
   </div>
   </div>
   </div>
     </form>
-</div>
-
+  </div>
 
 <script src="html5-qrcode.min.js"></script>
 <script src="bip39WordList.js"></script>
@@ -356,3 +311,87 @@
 
 </body>
 </html>
+<!-- Pending Settings
+<div class="form-group">
+<h2>Settings</h2>
+<p>Please select your desired settings:</p>
+
+Enable Uppercase Letters checkbox
+<label for="enableUppercase">Enable Uppercase Letters</label>
+<input type="checkbox" id="enableUppercase" name="settings" checked style="margin-bottom: 20px;">
+
+Enable Numbers checkbox
+<label for="enableNumbers">Enable Numbers</label>
+<input type="checkbox" id="enableNumbers" name="settings" checked style="margin-bottom: 20px;">
+
+Enable Symbols checkbox
+<label for="enableSymbols">Enable Symbols</label>
+<input type="checkbox" id="enableSymbols" name="settings" style="margin-bottom: 20px;">
+
+Exclude Similar Characters checkbox
+<label for="excludeSimilarCharacters">Exclude Similar Characters (e.g., i, l, 1, O, 0)</label>
+<input type="checkbox" id="excludeSimilarCharacters" name="settings" style="margin-bottom: 20px;">
+</div>
+
+
+Save Settings button
+<button onclick="saveSettings()">Save Settings</button>
+
+<div class="form-group">
+<label for="passwordLength">Enable Uppercase Letters:</label>
+<output id="enableUppercaseOutput"><input type="checkbox" id="enableUppercaseOutputInput"></output>
+</div>
+
+<div class="form-group">
+<label for="passwordLength">Enable Numbers:</label>
+<output id="enableNumbersOutput"><input type="checkbox" id="enableNumbersOutputInput"></output>
+</div>
+
+<div class="form-group">
+<label for="passwordLength">Enable Symbols:</label>
+<output id="enableSymbolsOutput"><input type="checkbox" id="enableSymbolsOutputInput"></output>
+</div>
+
+<div class="form-group">
+<label for="passwordLength">Exclude Similar Characters:</label>
+<output id="excludeSimilarCharactersOutput"><input type="checkbox" id="excludeSimilarCharactersOutputInput"></output>
+</div>
+
+<div class="form-group">
+<h2>Password Length</h2>
+<p>Please select your desired password length:</p>
+<input type="range" id="passwordLength" min="8" max="128" value="32" style="width: 80%; margin-bottom: 20px;">
+<output id="passwordLengthOutput">32</output>
+<div class="form-group">
+<label for="passwordLength">The selected Password Length is:</label>
+<output id="selectedPasswordLength"></output>
+</div>
+</div>
+
+<div class="form-group">
+<h2>Minimum Similarity</h2>
+<p>Please select your desired minimum similarity:</p>
+<input type="range" id="minSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
+<output id="minSimilarityOutput">5</output>
+<div class="form-group">
+<label for="minSimilarity">The selected Minimum Similarity is:</label>
+<output id="selectedMinSimilarity"></output>
+</div>
+</div>
+
+<div class="form-group">
+<h2>Maximum Similarity</h2>
+<p>Please select your desired maximum similarity:</p>
+<input type="range" id="maxSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
+<output id="maxSimilarityOutput">5</output>
+<div class="form-group">
+<label for="maxSimilarity">The selected Maximum Similarity is:</label>
+<output id="selectedMaxSimilarity"></output>
+</div>
+</div>
+</div>
+</div>
+</form>
+</div>
+
+-->
