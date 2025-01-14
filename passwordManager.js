@@ -18,7 +18,7 @@ function onScanSuccess(decodedText, decodedResult) {
         console.log(`Scan result ${decodedText}`, decodedResult);
         // Display the result in the results container and scan result output
         // resultContainer.innerText = `Scan result ${decodedText}`;
-        entropyInput.value = DecimalStringToHex(decodedText);
+        privateKeyField.value = DecimalStringToHex(decodedText);
         setMnemonic(indicesToWords(decodedText))
 }
 
