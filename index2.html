@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+</head>
+<body>
+    <div id="qr-reader" style="width: 300px;"></div>
+    <input id="mnemonicField" type="text">
+    <input id="entropyInput" type="text">
+
+    <script>
+        function setMnemonic(mnemonic) {
+            const mnemonicField = document.getElementById("mnemonicField");
+            if (mnemonicField) {
+                mnemonicField.value = mnemonic;
+            } else {
+                console.error("mnemonicField element not found!");
+            }
+        }
+
+        function DecimalStringToHex(decimalString) {
+            // Dummy implementation for testing
+            return parseInt(decimalString).toString(16);
+        }
+
+        function indicesToWords(indices) {
+            // Dummy implementation for testing
+            return "sample mnemonic words based on indices";
+        }
+
+        var html5QrcodeScanner = new Html5QrcodeScanner(
+            "qr-reader", { fps: 10, qrbox: 250 });
+
+        function onScanSuccess(decodedText, decodedResult) {
+            try {
+                console.log(`Scan result: ${decodedText}`, decodedResult);
+                const entropyInput = document.getElementById("entropyInput");
+                if (entropyInput) {
+                    entropyInput.value = DecimalStringToHex(decodedText);
+                } else {
+                    console.error("entropyInput element not found!");
+                }
+                setMnemonic(indicesToWords(decodedText));
+            } catch (error) {
+                console.error("Error during scanning:", error);
+            }
+        }
+
+        function main() {
+            html5QrcodeScanner.render(onScanSuccess);
+        }
+
+        main();
+    </script>
+</body>
+</html>
