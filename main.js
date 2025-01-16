@@ -5,6 +5,7 @@ var mnemonicField = document.getElementById('mnemonicField')
 var userOrMailField = document.getElementById('userOrMail')
 var privateKeyField = document.getElementById('privateKey')
 var settingsField = document.getElementById('settings')
+var publicKey = ""
 
 function setMnemonic(mnemonic) {
     document.getElementById("mnemonicField").value = mnemonic
@@ -382,10 +383,29 @@ function checkSiteInput(){}
 
 function checkEmailInput(){}
 
+async function derivePublicKey() {
+    try {
+        // Hash the value of privateKeyField
+        const resultado = await hashString(privateKeyField.value);
+
+        // Log the result (optional)
+        console.log("Public key derived:", resultado);
+
+        // Return the derived public key
+        return resultado;
+    } catch (error) {
+        console.error('Error hashing the public key:', error);
+        throw error; // Rethrow the error if needed
+    }
+}
+
 function main(){
     html5QrcodeScanner.render(onScanSuccess);
 }
 
+function encryptPrivateKey(){
+}
 
+function decryptPrivateKey(){
+}
 main()
-

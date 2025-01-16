@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encryption Example</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+<h1>Encrypt/Decrypt Private Key</h1>
+<label for="privateKey">Private Key:</label>
+<input type="text" id="privateKey" placeholder="Enter your private key"><br><br>
+
+<label for="encryptedPrivateKey">Encrypted Private Key:</label>
+<input type="text" id="encryptedPrivateKey" placeholder="Enter the encrypted private key"><br><br>
+
+<label for="password">Password:</label>
+<input type="password" id="password" placeholder="Enter your password"><br><br>
+
+<button onclick="encryptPrivateKey()">Encrypt Private Key</button>
+<button onclick="decryptPrivateKey()">Decrypt Private Key</button>
+<div>
+<label for="encryptedResult">The Encrypted Result Is:</label>
+<output id="encryptedResult"></output>
+</div>
+    <div>
+<label for="decryptedResult">The Decrypted Result:</label>
+<output id="decryptedResult"></output>
+    </div>
+<script>
+    function encryptPrivateKey() {
+        const privateKey = document.getElementById('privateKey').value;
+        const password = document.getElementById('password').value;
+
+        if (!privateKey || !password) {
+            alert('Please enter both a private key and a password.');
+            return;
+        }
+
+        // Encrypting the private key
+        const encrypted = CryptoJS.AES.encrypt(privateKey, password).toString();
+        document.getElementById('encryptedResult').value = encrypted;
+    }
+
+    function decryptPrivateKey() {
+        const encryptedPrivateKey = document.getElementById('encryptedPrivateKey');
+        const password = document.getElementById('password');
+
+        if (!encryptedPrivateKey.value || !password.value) {
+            alert('Please ensure there is an encrypted text and a password.');
+            return;
+        }
+
+        try {
+            // Ensure we use the correct encrypted value
+            const encryptedText = encryptedPrivateKey.value;
+
+            // Decrypting the private key
+            const decrypted = CryptoJS.AES.decrypt(encryptedText, password.value);
+            const originalText = decrypted.toString(CryptoJS.enc.Utf8);
+
+            if (!originalText) {
+                throw new Error('Decryption failed');
+            }
+
+            document.getElementById('decryptedResult').innerText = originalText;
+        } catch (error) {
+            alert('Decryption failed. Please check your password and try again.');
+        }
+    }
+</script>
+</body>
+</html>
