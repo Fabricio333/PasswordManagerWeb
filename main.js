@@ -4,23 +4,32 @@ var nonceField = document.getElementById('nonce')
 var mnemonicField = document.getElementById('mnemonicField')
 var userOrMailField = document.getElementById('userOrMail')
 var privateKeyField = document.getElementById('privateKey')
-var settingsField = document.getElementById('settings')
-var publicKey = ""
-
+var currentUserData = {}
 function setMnemonic(mnemonic) {
     document.getElementById("mnemonicField").value = mnemonic
 }
 
 var html5QrcodeScanner = new Html5QrcodeScanner(
     "qr-reader", { fps: 10, qrbox: 250 });
-function onScanSuccess(decodedText, decodedResult) {
+async function onScanSuccess(decodedText, decodedResult) {
         lastResult = decodedText; // interesante esto del last result para mejorar la funcionalidad al repetir
         // Handle on success condition with the decoded message.
         console.log(`Scan result ${decodedText}`, decodedResult);
         // Display the result in the results container and scan result output
         // resultContainer.innerText = `Scan result ${decodedText}`;
-        privateKeyField.value = DecimalStringToHex(decodedText);
         setMnemonic(indicesToWords(decodedText))
+        alert("QR Mnemnonic Scanned Succesfully")
+    try {
+        const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
+        if (isValid) {
+            privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));
+        } else {
+            alert('The Seed Phrase is not valid');
+            throw new Error('Checksum not valid');
+        }
+    } catch (error) {
+        console.error('An error verifying seed phrase occurred:', error);
+    }
 }
 
 async function hashString(stringToHash) {
@@ -87,7 +96,7 @@ async function showPassword() {
             throw new Error('Checksum not valid');
         }
     } catch (error) {
-        console.error('An error occurred:', error);
+        console.error('An error verifying seed phrase occurred:', error);
     }
 
     // Initialize or load the nonce for the site
@@ -106,10 +115,10 @@ async function showPassword() {
     console.log(concatenado)
     hashString(concatenado).then(resultado => {
         const entropiaContraseña = resultado.substring(0, 16);
-        password.value = 'PASS' + entropiaContraseña + '249+';
+        passwordField.value = 'PASS' + entropiaContraseña + '249+';
     }).catch(error => {
         console.error('Error hashing the string:', error);
-        password.value = 'Error generating password';
+        passwordField.value = 'Error generating password';
     });
 }
 
@@ -352,32 +361,44 @@ function generateValidMnemonic() {
         const mnemonicBinary = entropyBinary + checksum;
         var mnemonic = binaryToMnemonic(mnemonicBinary, words)
         setMnemonic(mnemonic)
-        return;
+        privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));        return;
     })();
     // Example usage generateValidMnemonic().then(mnemonic => console.log("Generated Mnemonic:", mnemonic)).catch(console.error);
 
 }
-// Flag variable to keep track of whether settings are visible or not
-let isVisible = false;
 
-/**
- * Toggles visibility of settings container.
- */
+// Flag variable to keep track of whether settings are visible or not
+let settingsVisible = false;
 function toggleSettings() {
     // Get reference to #toggle-container element
     const container = document.getElementById('toggle-container');
 
     // If settings are currently visible, hide them; otherwise show them
-    if (isVisible) {
+    if (settingsVisible) {
         container.style.display = 'none';
     } else {
         container.style.display = 'block';
     }
 
     // Toggle the flag variable to remember new state
-    isVisible = !isVisible;
+    settingsVisible = !settingsVisible;
 }
 
+let QRScannerVisible = false;
+function toggleQRReader(){
+    // Get reference to #toggle-container element
+    const container = document.getElementById('qr-reader');
+
+    if (!QRScannerVisible){
+        container.style.display = 'block';
+        html5QrcodeScanner.render(onScanSuccess);
+        QRScannerVisible = !QRScannerVisible;
+    }
+    else{
+        container.style.display = 'none';
+        QRScannerVisible = !QRScannerVisible;
+    }
+}
 // Check inputs with common sites list
 function checkSiteInput(){}
 
@@ -399,13 +420,3 @@ async function derivePublicKey() {
     }
 }
 
-function main(){
-    html5QrcodeScanner.render(onScanSuccess);
-}
-
-function encryptPrivateKey(){
-}
-
-function decryptPrivateKey(){
-}
-main()

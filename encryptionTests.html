@@ -1,73 +1,136 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Encryption Example</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
 <body>
-<h1>Encrypt/Decrypt Private Key</h1>
-<label for="privateKey">Private Key:</label>
-<input type="text" id="privateKey" placeholder="Enter your private key"><br><br>
+<label for="encryptionPassword">Encryption Password:</label>
+<input type="password" id="encryptionPassword">
+<button onclick="saveEncryptedData(encryptedData1)">Save Data</button>
+<button onclick="loadEncryptedData()">Load Data</button>
+<button onclick="deleteEncryptedData()">Delete Data</button>
 
-<label for="encryptedPrivateKey">Encrypted Private Key:</label>
-<input type="text" id="encryptedPrivateKey" placeholder="Enter the encrypted private key"><br><br>
-
-<label for="password">Password:</label>
-<input type="password" id="password" placeholder="Enter your password"><br><br>
-
-<button onclick="encryptPrivateKey()">Encrypt Private Key</button>
-<button onclick="decryptPrivateKey()">Decrypt Private Key</button>
-<div>
-<label for="encryptedResult">The Encrypted Result Is:</label>
-<output id="encryptedResult"></output>
-</div>
-    <div>
-<label for="decryptedResult">The Decrypted Result:</label>
-<output id="decryptedResult"></output>
-    </div>
 <script>
-    function encryptPrivateKey() {
-        const privateKey = document.getElementById('privateKey').value;
-        const password = document.getElementById('password').value;
+    // Example encrypted data
+    const encryptedData1 = {
+        "privateKey": "wafdsfssdasdfas",
+        "users": {
+            "user1": {
+                "site1": 0,
+                "site2": 0
+            },
+            "user2": {
+                "site1": 0,
+                "site2": 0
+            }
+        }
+    };
 
-        if (!privateKey || !password) {
-            alert('Please enter both a private key and a password.');
+    const encryptedData2 = {
+        "privateKey": "ASDFSADFSAD",
+        "users": {
+            "user3": {
+                "site3": 0,
+                "site4": 0
+            },
+            "user4": {
+                "site5": 0,
+                "site6": 0
+            }
+        }
+    };
+
+    // Hash the password
+    function hashPassword(password) {
+        return CryptoJS.SHA256(password).toString();
+
+    }
+    function loadEncryptedData() {
+        const passwordInput = document.getElementById('encryptionPassword');
+        if (!passwordInput) {
+            console.error('Password input field not found in the DOM.');
+            alert('An error occurred. Please reload the page and try again.');
             return;
         }
 
-        // Encrypting the private key
-        const encrypted = CryptoJS.AES.encrypt(privateKey, password).toString();
-        document.getElementById('encryptedResult').value = encrypted;
-    }
-
-    function decryptPrivateKey() {
-        const encryptedPrivateKey = document.getElementById('encryptedPrivateKey');
-        const password = document.getElementById('password');
-
-        if (!encryptedPrivateKey.value || !password.value) {
-            alert('Please ensure there is an encrypted text and a password.');
+        const password = passwordInput.value.trim();
+        if (!password) {
+            alert('Please enter a password.');
             return;
         }
 
         try {
-            // Ensure we use the correct encrypted value
-            const encryptedText = encryptedPrivateKey.value;
+            const key = hashPassword(password); // Use the hashed password to retrieve the encrypted data
+            const storedData = loadDictionary("encryptedDataStorage") || {}; // Load the dictionary
 
-            // Decrypting the private key
-            const decrypted = CryptoJS.AES.decrypt(encryptedText, password.value);
-            const originalText = decrypted.toString(CryptoJS.enc.Utf8);
-
-            if (!originalText) {
-                throw new Error('Decryption failed');
+            if (!storedData || typeof storedData !== 'object') {
+                alert('No stored data found or invalid data format.');
+                return;
             }
 
-            document.getElementById('decryptedResult').innerText = originalText;
+            const encryptedData = storedData[key]; // Retrieve the encrypted data using the hashed key
+            if (!encryptedData) {
+                alert('No data found for the provided password.');
+                return;
+            }
+
+            console.log('Encrypted data:', encryptedData);
+
+            // Decrypt the data using the raw password
+            const decryptedBytes = CryptoJS.AES.decrypt(encryptedData, password);
+            const decryptedData = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
+            if (!decryptedData) {
+                throw new Error('Failed to decrypt data. Possibly malformed UTF-8.');
+            }
+
+            console.log('Decrypted data:', decryptedData);
+            alert('Data loaded successfully. Check console for details.');
+            return JSON.parse(decryptedData); // Parse the JSON string back into an object
         } catch (error) {
-            alert('Decryption failed. Please check your password and try again.');
+            console.error('Error during decryption or parsing:', error.message);
+            alert('Failed to decrypt. Invalid password or corrupted data.');
         }
     }
+
+    function saveEncryptedData(dataToEncrypt) {
+        const password = document.getElementById('encryptionPassword').value;
+        if (!password) {
+            alert('Please enter a password.');
+            return;
+        }
+
+        const key = hashPassword(password); // Use the hashed password as the dictionary key
+        const encrypted = CryptoJS.AES.encrypt(JSON.stringify(dataToEncrypt), password).toString(); // Encrypt with the raw password
+
+        // Load existing dictionary from localStorage
+        const existingData = loadDictionary("encryptedDataStorage") || {};
+        existingData[key] = encrypted; // Save the encrypted data using the hashed password as the key
+        saveDictionary("encryptedDataStorage", existingData); // Save back to localStorage
+        console.log('Data saved with hashed key:', key);
+    }
+
+
+    // Load the entire dictionary from localStorage
+    function loadDictionary(key) {
+        const storedData = localStorage.getItem(key);
+        if (storedData) {
+            return JSON.parse(storedData); // Return parsed object
+        } else {
+            return {}; // Return empty object if nothing is found
+        }
+    }
+
+    // Save the entire dictionary to localStorage
+    function saveDictionary(key, dictionary) {
+        localStorage.setItem(key, JSON.stringify(dictionary));
+        console.log('Dictionary saved in localStorage.');
+    }
+function deleteEncryptedData(){
+    localStorage.setItem("encryptedDataStorage", JSON.stringify({}));
+    console.log("Encrypted Storage Deleted Succesfully")
+}
+    console.log(loadDictionary())
 </script>
 </body>
 </html>
