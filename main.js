@@ -477,8 +477,8 @@ function saveEncryptedData() {
         alert('Please enter a password.');
         return;
     }
-
     const key = hashPassword(password); // Use the hashed password as the dictionary key
+    localStoredData["privateKey"] = privateKeyField.value
     const encrypted = CryptoJS.AES.encrypt(JSON.stringify(localStoredData), password).toString(); // Encrypt with the raw password
 
     // Load existing dictionary from localStorage
