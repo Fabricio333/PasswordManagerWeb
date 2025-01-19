@@ -67,6 +67,20 @@
         border-color: #4a90e2; /* Highlighted border on focus */
         outline: none; /* Removes default browser outline */
     }
+    input[type="password"] {
+        width: 100%; /* Ensures the input fields span the width of their container */
+        max-width: 100%; /* Prevents input fields from escaping the container's limits */
+        padding: 12px; /* Uniform padding for consistent spacing inside the field */
+        border: 1px solid #ccc; /* Matches the visual style of other elements */
+        border-radius: 8px; /* Matches button border-radius */
+        font-size: 1rem; /* Consistent text size */
+        transition: border-color 0.3s; /* Smooth transition on focus */
+        box-sizing: border-box; /* Ensures padding and border are included in the width */
+    }
+    input[type="password"]:focus {
+        border-color: #4a90e2; /* Highlighted border on focus */
+        outline: none; /* Removes default browser outline */
+    }
 
     .form-group {
         margin-bottom: 20px; /* Adds space between form groups */
@@ -213,20 +227,33 @@
         color: #333; /* Consistent text color */
         background-color: #fff; /* Avoid unintended appearance */
     }
+
+    .password-manager-title {
+        font-family: 'Poppins', sans-serif; /* Modern and clean font */
+        font-size: 2.5rem; /* Larger font size */
+        text-transform: uppercase; /* Make the text uppercase */
+        letter-spacing: 2px; /* Add spacing between letters */
+        text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+        margin-bottom: 20px; /* Add spacing below */
+        text-align: center; /* Center-align the title */
+    }
     </style>
 </head>
 
 <body>
 <div class="container">
-    <h1>Password Manager</h1>
-
-    <!-- QR Code Scanner -->
-    <div class="qr-reader-container">
-        <div id="qr-reader"></div>
-    </div>
+    <h1 class="password-manager-title">Password Manager</h1>
 
     <!-- Form Section -->
     <form>
+        <div class="form-group">
+            <label for="encryptionPassword">Enter your password to decrypt the local stored data.</label>
+            <input type="password" id="encryptionPassword" placeholder="Enter your password">
+        </div>
+        <div class="actions">
+            <button type="button" onclick="saveEncryptedData()">Encrypt Local Storage</button>
+            <button type="button" onclick="loadEncryptedData()">Decrypt Local Storage</button>
+        </div>
         <div class="form-group">
             <label for="userOrMail">Optional Username or eMail, default empty:</label>
             <input type="text" id="userOrMail" placeholder="Bob123 or bob@bitcoin.com">
@@ -285,6 +312,13 @@
         <!-- Container element -->
   <div id="toggle-container" style="display: none;">
     <!-- All your HTML elements here... -->
+      <!-- QR Code Scanner -->
+      <div class="qr-reader-container" >
+          <div id="qr-reader" style="display: none;"></div>
+      </div>
+      <div class="actions">
+          <button type= "button" onclick="toggleQRReader()" class="form-group">Press to show/hide QR private key scanner</button>
+      </div>
     <div class="actions">
       <button type= "button" onclick="generateValidMnemonic()" class="form-group">Generate Mnemonic</button>
     </div>
@@ -296,8 +330,8 @@
   </div>
 
   <div class="actions">
-    <button type= "button" onclick="importSettings()">Import</button>
-    <button type= "button" onclick="exportSettings()">Export</button>
+    <button type= "button" onclick="importLocalStorage()">Import Local Storage</button>
+    <button type= "button" onclick="exportLocalStorage()">Export Local Storage</button>
   </div>
   </div>
   </div>
@@ -306,86 +340,12 @@
 
 <script src="./html5-qrcode.min.js"></script>
 <script src="./bip39WordList.js"></script>
-<script src="./passwordManager.js"></script>
+<script src="./crypto-js.min.js"></script>
+<script src="./main.js"></script>
 
 </body>
 </html>
-<!-- Pending Settings
-<div class="form-group">
-<h2>Settings</h2>
-<p>Please select your desired settings:</p>
 
-Enable Uppercase Letters checkbox
-<label for="enableUppercase">Enable Uppercase Letters</label>
-<input type="checkbox" id="enableUppercase" name="settings" checked style="margin-bottom: 20px;">
-
-Enable Numbers checkbox
-<label for="enableNumbers">Enable Numbers</label>
-<input type="checkbox" id="enableNumbers" name="settings" checked style="margin-bottom: 20px;">
-
-Enable Symbols checkbox
-<label for="enableSymbols">Enable Symbols</label>
-<input type="checkbox" id="enableSymbols" name="settings" style="margin-bottom: 20px;">
-
-Exclude Similar Characters checkbox
-<label for="excludeSimilarCharacters">Exclude Similar Characters (e.g., i, l, 1, O, 0)</label>
-<input type="checkbox" id="excludeSimilarCharacters" name="settings" style="margin-bottom: 20px;">
-</div>
-
-
-Save Settings button
-<button onclick="saveSettings()">Save Settings</button>
-
-<div class="form-group">
-<label for="passwordLength">Enable Uppercase Letters:</label>
-<output id="enableUppercaseOutput"><input type="checkbox" id="enableUppercaseOutputInput"></output>
-</div>
-
-<div class="form-group">
-<label for="passwordLength">Enable Numbers:</label>
-<output id="enableNumbersOutput"><input type="checkbox" id="enableNumbersOutputInput"></output>
-</div>
-
-<div class="form-group">
-<label for="passwordLength">Enable Symbols:</label>
-<output id="enableSymbolsOutput"><input type="checkbox" id="enableSymbolsOutputInput"></output>
-</div>
-
-<div class="form-group">
-<label for="passwordLength">Exclude Similar Characters:</label>
-<output id="excludeSimilarCharactersOutput"><input type="checkbox" id="excludeSimilarCharactersOutputInput"></output>
-</div>
-
-<div class="form-group">
-<h2>Password Length</h2>
-<p>Please select your desired password length:</p>
-<input type="range" id="passwordLength" min="8" max="128" value="32" style="width: 80%; margin-bottom: 20px;">
-<output id="passwordLengthOutput">32</output>
-<div class="form-group">
-<label for="passwordLength">The selected Password Length is:</label>
-<output id="selectedPasswordLength"></output>
-</div>
-</div>
-
-<div class="form-group">
-<h2>Minimum Similarity</h2>
-<p>Please select your desired minimum similarity:</p>
-<input type="range" id="minSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
-<output id="minSimilarityOutput">5</output>
-<div class="form-group">
-<label for="minSimilarity">The selected Minimum Similarity is:</label>
-<output id="selectedMinSimilarity"></output>
-</div>
-</div>
-
-<div class="form-group">
-<h2>Maximum Similarity</h2>
-<p>Please select your desired maximum similarity:</p>
-<input type="range" id="maxSimilarity" min="0" max="10" value="5" style="width: 80%; margin-bottom: 20px;">
-<output id="maxSimilarityOutput">5</output>
-<div class="form-group">
-<label for="maxSimilarity">The selected Maximum Similarity is:</label>
-<output id="selectedMaxSimilarity"></output>
 </div>
 </div>
 </div>
@@ -393,4 +353,3 @@ Save Settings button
 </form>
 </div>
 
--->

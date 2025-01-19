@@ -4,22 +4,63 @@ var nonceField = document.getElementById('nonce')
 var mnemonicField = document.getElementById('mnemonicField')
 var userOrMailField = document.getElementById('userOrMail')
 var privateKeyField = document.getElementById('privateKey')
-var settingsField = document.getElementById('settings')
+var localStoredData = {}
+var html5QrcodeScanner = new Html5QrcodeScanner(
+    "qr-reader", { fps: 10, qrbox: 250 });
+var lastResult = ""
+/*
+Local Stored Data is stored encrypted with the following structure:
+var localStoredData = {
+    "privateKey": "asdfgqwerasdfg",
+    "users": {
+        "bob123": {
+            "facebook.com": 0,
+            "site2": 0
+        },
+        "bob@bob.com": {
+            "google.com": 0,
+            "site2": 0
+        }
+    }
+};
+
+With a password sensible data is encrypted like the following:
+
+localStorage("encryptedDataStorage") = {
+hash(password) : encrypted(localStoredData, password),
+hash(password2) : encrypted(localStoredData2, password2)
+}
+
+*/
 
 function setMnemonic(mnemonic) {
     document.getElementById("mnemonicField").value = mnemonic
 }
 
-var html5QrcodeScanner = new Html5QrcodeScanner(
-    "qr-reader", { fps: 10, qrbox: 250 });
-function onScanSuccess(decodedText, decodedResult) {
-        lastResult = decodedText; // interesante esto del last result para mejorar la funcionalidad al repetir
+
+async function onScanSuccess(decodedText, decodedResult) {
+    if (lastResult == decodedText){
+        alert("This private key is already scanned.")
+        return;
+    }
+
         // Handle on success condition with the decoded message.
         console.log(`Scan result ${decodedText}`, decodedResult);
         // Display the result in the results container and scan result output
         // resultContainer.innerText = `Scan result ${decodedText}`;
-        privateKeyField.value = DecimalStringToHex(decodedText);
         setMnemonic(indicesToWords(decodedText))
+        alert("QR Mnemnonic Scanned Succesfully")
+    try {
+        const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
+        if (isValid) {
+            privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));
+        } else {
+            alert('The Seed Phrase is not valid');
+            throw new Error('Checksum not valid');
+        }
+    } catch (error) {
+        console.error('An error verifying seed phrase occurred:', error);
+    }
 }
 
 async function hashString(stringToHash) {
@@ -65,60 +106,76 @@ function DecimalStringToHex(DecimalString) {
 
 async function showPassword() {
     // Load the nonces dictionary from local storage
-    let nonces = loadDictionary('nonces');
 
+    if (!localStoredData["users"]) {
+        localStoredData["users"] = {};
+    }
+    if (!localStoredData["users"][userOrMailField.value]) {
+        localStoredData["users"][userOrMailField.value] = {};
+    }
     // Check if the site input is empty
     if (!siteField.value) {
         alert('The site input is empty');
         return;
     }
-    if (!mnemonicField.value) {
-        alert('The mnemonic input is empty');
-        return;
-    }
+    let nonces = localStoredData["users"][userOrMailField.value]
 
-    try {
-        const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
-        if (isValid) {
-            privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));
-        } else {
-            alert('The Seed Phrase is not valid');
-            throw new Error('Checksum not valid');
+
+    /*
+        if (!mnemonicField.value) {
+            alert('The mnemonic input is empty');
         }
-    } catch (error) {
-        console.error('An error occurred:', error);
-    }
 
+        try {
+            const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
+            if (isValid) {
+                privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));
+            } else {
+                alert('The Seed Phrase is not valid');
+                throw new Error('Checksum not valid');
+            }
+        } catch (error) {
+            console.error('An error verifying seed phrase occurred:', error);
+        }
+    */
+    
     // Initialize or load the nonce for the site
-    if (!nonces[site.value]) {
-        nonces[site.value] = 0;
-        console.log(`Initialized nonce for site: ${site.value} el nonce es: ${nonces[site.value]}`);
-        saveDictionary('nonces', nonces);
+    if (!nonces[siteField.value]) {
+        localStoredData["users"][userOrMailField.value][siteField.value] = 0;
+        nonces = localStoredData["users"][userOrMailField.value]
+        console.log(`Initialized nonce for site: ${siteField.value} el nonce es: ${nonces[siteField.value]}`);
     } else {
-        console.log(`Loaded nonce for site: ${site.value} = ${nonces[site.value]}`);
+        console.log(`Loaded nonce for site: ${siteField.value} = ${nonces[siteField.value]}`);
     }
 
-    nonceField.value = nonces[site.value];
-
-    const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonce.value ;
-
+    nonceField.value = localStoredData["users"][userOrMailField.value][siteField.value];
+    const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonces[siteField.value] ;
     console.log(concatenado)
+
     hashString(concatenado).then(resultado => {
         const entropiaContraseña = resultado.substring(0, 16);
-        password.value = 'PASS' + entropiaContraseña + '249+';
+        passwordField.value = 'PASS' + entropiaContraseña + '249+';
     }).catch(error => {
         console.error('Error hashing the string:', error);
-        password.value = 'Error generating password';
+        passwordField.value = 'Error generating password';
     });
+    console.log(localStoredData)
 }
 
 function newPassword(){
-    const nonces = loadDictionary('nonces')
+    if (!localStoredData["users"]) {
+        localStoredData["users"] = {};
+    }
+    if (!localStoredData["users"][userOrMailField.value]) {
+        localStoredData["users"][userOrMailField.value] = {};
+    }
+    const nonces = localStoredData["users"][userOrMailField.value]
+
     // Check if there is a nonce already
     if(nonces[siteField.value] != null){
         let integerValue = +nonces[siteField.value]
         nonces[siteField.value] = integerValue + 1
-        saveDictionary('nonces',nonces)
+        localStoredData["users"][userOrMailField.value] = nonces
         showPassword()
     }
     else{
@@ -133,7 +190,7 @@ if (outputText && !outputText.value.trim()) { // Check if selected text is empty
         alert("Selected text is empty!");
         return false;
 }
-    navigator.clipboard.writeText(outputText.textContent).then(
+    navigator.clipboard.writeText(outputText.value).then(
         function() {
         alert('Copied Succesfully to clipboard!');
     },
@@ -262,41 +319,19 @@ function deleteLocalStorageVariable(key) {
     }
 }
 
-function resetNonces(){
+function resetNonces(){ // modify to reset just the nonce of the current website
     deleteLocalStorageVariable("nonces")
     alert("Nonces Reseted Succesfully")
 }
 
-function resetSettings(){
-    deleteLocalStorageVariable("settings")
-    alert("Settings Reseted Succesfully")
-}
+function deleteLocalStoredData() { //
+    /*
+    Deletes all the stored data for a password, try to find a way to double check that,
+    also prevent to encrypt and erase with 0 data, it shouldn't happen if data was already loaded,
+    sorry it can happen if there is no loaded data,
+    a password is in the input and the "encrypt" button is pressed
+    */
 
-function pushNoncesToCloud(){
-    // Encrypt nonces file to cloud
-}
-
-function pullNoncesFromCloud(){
-    // Decrypt nonces file to cloud
-
-}
-
-function exportSettings() {
-    var nonces = loadDictionary('nonces')
-    console.log(nonces)
-    var settings = JSON.stringify(nonces, null, 4)
-    if (Object.keys(nonces).length > 0) {
-        document.getElementById('settings').value = settings
-        copyElementToClipboard('settings')
-    } else {
-        document.getElementById('settings').value = ""
-    }
-}
-
-function importSettings(){
-    var settings = document.getElementById('settings')
-    saveDictionary('nonces',settings)
-    alert("Local Stored Settings Imported")
 }
 
 function generateValidMnemonic() {
@@ -351,41 +386,145 @@ function generateValidMnemonic() {
         const mnemonicBinary = entropyBinary + checksum;
         var mnemonic = binaryToMnemonic(mnemonicBinary, words)
         setMnemonic(mnemonic)
-        return;
+        privateKeyField.value = DecimalStringToHex(wordsToIndices(mnemonicField.value));        return;
     })();
     // Example usage generateValidMnemonic().then(mnemonic => console.log("Generated Mnemonic:", mnemonic)).catch(console.error);
 
 }
-// Flag variable to keep track of whether settings are visible or not
-let isVisible = false;
 
-/**
- * Toggles visibility of settings container.
- */
+// Flag variable to keep track of whether settings are visible or not
+let settingsVisible = false;
 function toggleSettings() {
     // Get reference to #toggle-container element
     const container = document.getElementById('toggle-container');
 
     // If settings are currently visible, hide them; otherwise show them
-    if (isVisible) {
+    if (settingsVisible) {
         container.style.display = 'none';
     } else {
         container.style.display = 'block';
     }
 
     // Toggle the flag variable to remember new state
-    isVisible = !isVisible;
+    settingsVisible = !settingsVisible;
 }
 
+let QRScannerVisible = false;
+function toggleQRReader(){
+    // Get reference to #toggle-container element
+    const container = document.getElementById('qr-reader');
+
+    if (!QRScannerVisible){
+        container.style.display = 'block';
+        html5QrcodeScanner.render(onScanSuccess);
+        QRScannerVisible = !QRScannerVisible;
+    }
+    else{
+        container.style.display = 'none';
+        QRScannerVisible = !QRScannerVisible;
+    }
+}
 // Check inputs with common sites list
+
 function checkSiteInput(){}
-
+// Show an alert that the site is new.
 function checkEmailInput(){}
+//
+function pushNoncesToCloud(){
+    // Encrypt nonces file to cloud
+}
+//
+function pullNoncesFromCloud(){
+    // Decrypt nonces file to cloud
 
-function main(){
-    html5QrcodeScanner.render(onScanSuccess);
 }
 
 
-main()
+// function to import/export settings
 
+// Hash the password
+function hashPassword(password) {
+    return CryptoJS.SHA256(password).toString();
+
+}
+
+function hashInput(input){
+    return CryptoJS.SHA256(input).toString();
+}
+function loadEncryptedData() {
+    const passwordInput = document.getElementById('encryptionPassword');
+    const password = passwordInput.value.trim();
+    if (!password || !passwordInput) {
+        alert('No password to load encrypted data, no local storage will be used.');
+        return {};
+    }
+
+    try {
+        const key = hashPassword(password); // Use the hashed password to retrieve the encrypted data
+        const storedData = loadDictionary("encryptedDataStorage") || {}; // Load the dictionary
+
+        if (!storedData || typeof storedData !== 'object') {
+            alert('No stored data found or invalid data format.');
+            return;
+        }
+
+        const encryptedData = storedData[key]; // Retrieve the encrypted data using the hashed key
+        if (!encryptedData) {
+            alert('No data found for the provided password.');
+            return;
+        }
+
+        console.log('Encrypted data:', encryptedData);
+
+        // Decrypt the data using the raw password
+        const decryptedBytes = CryptoJS.AES.decrypt(encryptedData, password);
+        const decryptedData = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
+        if (!decryptedData) {
+            throw new Error('Failed to decrypt data. Possibly malformed UTF-8.');
+        }
+
+        console.log('Decrypted data:', decryptedData);
+        alert('Data loaded successfully.');
+        localStoredData = JSON.parse(decryptedData)
+        privateKeyField.value = localStoredData["privateKey"]
+        return localStoredData; // Parse the JSON string back into an object
+    } catch (error) {
+        console.error('Error during decryption or parsing:', error.message);
+        alert('Failed to decrypt. Invalid password or corrupted data.');
+    }
+}
+
+function saveEncryptedData() {
+    const password = document.getElementById('encryptionPassword').value;
+    if (!password) {
+        alert('Please enter a password.');
+        return;
+    }
+
+    if (Object.keys(localStoredData).length === 0) {
+        alert('There is no data to save.');
+        return;
+    }
+
+    localStoredData["privateKey"] = privateKeyField.value
+
+    const key = hashPassword(password); // Use the hashed password as the dictionary key
+    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(localStoredData), password).toString(); // Encrypt with the raw password
+
+    // Load existing dictionary from localStorage
+    const existingData = loadDictionary("encryptedDataStorage") || {};
+    existingData[key] = encrypted; // Save the encrypted data using the hashed password as the key
+    saveDictionary("encryptedDataStorage", existingData); // Save back to localStorage
+    console.log('Data saved with hashed key:', key);
+    console.log('Data:', existingData[key]);
+    alert("Data encrypted succesfully")
+}
+
+
+function deleteEncryptedData(){
+    localStorage.setItem("encryptedDataStorage", JSON.stringify({}));
+    console.log("Encrypted Storage Deleted Succesfully")
+}
+
+// Missing HEX to Bip39 Mnemonic
