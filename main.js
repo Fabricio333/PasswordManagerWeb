@@ -5,30 +5,45 @@ var mnemonicField = document.getElementById('mnemonicField')
 var userOrMailField = document.getElementById('userOrMail')
 var privateKeyField = document.getElementById('privateKey')
 var localStoredData = {}
+var html5QrcodeScanner = new Html5QrcodeScanner(
+    "qr-reader", { fps: 10, qrbox: 250 });
+var lastResult = ""
 /*
+Local Stored Data is stored encrypted with the following structure:
 var localStoredData = {
-    "privateKey": "wafdsfssdasdfas",
+    "privateKey": "asdfgqwerasdfg",
     "users": {
-        "user1": {
-            "site1": 0,
+        "bob123": {
+            "facebook.com": 0,
             "site2": 0
         },
-        "user2": {
-            "site1": 0,
+        "bob@bob.com": {
+            "google.com": 0,
             "site2": 0
         }
     }
 };
+
+With a password sensible data is encrypted like the following:
+
+localStorage("encryptedDataStorage") = {
+hash(password) : encrypted(localStoredData, password),
+hash(password2) : encrypted(localStoredData2, password2)
+}
+
 */
 
 function setMnemonic(mnemonic) {
     document.getElementById("mnemonicField").value = mnemonic
 }
 
-var html5QrcodeScanner = new Html5QrcodeScanner(
-    "qr-reader", { fps: 10, qrbox: 250 });
+
 async function onScanSuccess(decodedText, decodedResult) {
-        lastResult = decodedText; // interesante esto del last result para mejorar la funcionalidad al repetir
+    if (lastResult == decodedText){
+        alert("This private key is already scanned.")
+        return;
+    }
+
         // Handle on success condition with the decoded message.
         console.log(`Scan result ${decodedText}`, decodedResult);
         // Display the result in the results container and scan result output
@@ -105,6 +120,7 @@ async function showPassword() {
     }
     let nonces = localStoredData["users"][userOrMailField.value]
 
+
     /*
         if (!mnemonicField.value) {
             alert('The mnemonic input is empty');
@@ -122,6 +138,7 @@ async function showPassword() {
             console.error('An error verifying seed phrase occurred:', error);
         }
     */
+    
     // Initialize or load the nonce for the site
     if (!nonces[siteField.value]) {
         localStoredData["users"][userOrMailField.value][siteField.value] = 0;
@@ -173,7 +190,7 @@ if (outputText && !outputText.value.trim()) { // Check if selected text is empty
         alert("Selected text is empty!");
         return false;
 }
-    navigator.clipboard.writeText(outputText.textContent).then(
+    navigator.clipboard.writeText(outputText.value).then(
         function() {
         alert('Copied Succesfully to clipboard!');
     },
@@ -302,17 +319,20 @@ function deleteLocalStorageVariable(key) {
     }
 }
 
-function resetNonces(){
+function resetNonces(){ // modify to reset just the nonce of the current website
     deleteLocalStorageVariable("nonces")
     alert("Nonces Reseted Succesfully")
 }
 
-function resetSettings(){
-    deleteLocalStorageVariable("settings")
-    alert("Settings Reseted Succesfully")
+function deleteLocalStoredData() { //
+    /*
+    Deletes all the stored data for a password, try to find a way to double check that,
+    also prevent to encrypt and erase with 0 data, it shouldn't happen if data was already loaded,
+    sorry it can happen if there is no loaded data,
+    a password is in the input and the "encrypt" button is pressed
+    */
+
 }
-
-
 
 function generateValidMnemonic() {
     if (words.length !== 2048) {
@@ -427,6 +447,10 @@ function hashPassword(password) {
     return CryptoJS.SHA256(password).toString();
 
 }
+
+function hashInput(input){
+    return CryptoJS.SHA256(input).toString();
+}
 function loadEncryptedData() {
     const passwordInput = document.getElementById('encryptionPassword');
     const password = passwordInput.value.trim();
@@ -461,7 +485,7 @@ function loadEncryptedData() {
         }
 
         console.log('Decrypted data:', decryptedData);
-        alert('Data loaded successfully. Check console for details.');
+        alert('Data loaded successfully.');
         localStoredData = JSON.parse(decryptedData)
         privateKeyField.value = localStoredData["privateKey"]
         return localStoredData; // Parse the JSON string back into an object
@@ -477,8 +501,15 @@ function saveEncryptedData() {
         alert('Please enter a password.');
         return;
     }
-    const key = hashPassword(password); // Use the hashed password as the dictionary key
+
+    if (Object.keys(localStoredData).length === 0) {
+        alert('There is no data to save.');
+        return;
+    }
+
     localStoredData["privateKey"] = privateKeyField.value
+
+    const key = hashPassword(password); // Use the hashed password as the dictionary key
     const encrypted = CryptoJS.AES.encrypt(JSON.stringify(localStoredData), password).toString(); // Encrypt with the raw password
 
     // Load existing dictionary from localStorage
@@ -487,7 +518,7 @@ function saveEncryptedData() {
     saveDictionary("encryptedDataStorage", existingData); // Save back to localStorage
     console.log('Data saved with hashed key:', key);
     console.log('Data:', existingData[key]);
-
+    alert("Data encrypted succesfully")
 }
 
 
@@ -496,4 +527,4 @@ function deleteEncryptedData(){
     console.log("Encrypted Storage Deleted Succesfully")
 }
 
-console.log(loadDictionary())
+// Missing HEX to Bip39 Mnemonic
