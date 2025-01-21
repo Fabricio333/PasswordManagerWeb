@@ -31,6 +31,9 @@ hash(password) : encrypted(localStoredData, password),
 hash(password2) : encrypted(localStoredData2, password2)
 }
 
+Add safety measures like alerting that a password is new for that site.
+Alerting that was pressed the new password for a site N=1
+Adding a variable to alerting to press to times when overwriting with new data the local Stored Data, not always just when data differs from previious.
 */
 
 function setMnemonic(mnemonic) {
@@ -121,10 +124,7 @@ async function showPassword() {
     let nonces = localStoredData["users"][userOrMailField.value]
 
 
-    /*
-        if (!mnemonicField.value) {
-            alert('The mnemonic input is empty');
-        }
+
 
         try {
             const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
@@ -137,7 +137,7 @@ async function showPassword() {
         } catch (error) {
             console.error('An error verifying seed phrase occurred:', error);
         }
-    */
+
     
     // Initialize or load the nonce for the site
     if (!nonces[siteField.value]) {
