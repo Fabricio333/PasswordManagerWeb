@@ -247,8 +247,27 @@
     <!-- Form Section -->
     <form>
         <div class="form-group">
-            <label for="encryptionPassword">Enter your password to decrypt the local stored data.</label>
-            <input type="password" id="encryptionPassword" placeholder="Enter your password">
+            <label for="encryptionPassword">Password:</label>
+            <div style="position: relative;">
+                <input
+                        type="password"
+                        id="encryptionPassword"
+                        placeholder="Enter your password"
+                        style="padding-right: 30px;"
+                />
+                <span
+                        id="togglePassword"
+                        style="
+        position: absolute;
+        top: 50%;
+        right: 10px;
+        transform: translateY(-50%);
+        cursor: pointer;
+      "
+                >
+      👁️
+    </span>
+            </div>
         </div>
         <div class="actions">
             <button type="button" onclick="saveEncryptedData()">Encrypt Local Storage</button>

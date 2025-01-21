@@ -8,6 +8,7 @@ var localStoredData = {}
 var html5QrcodeScanner = new Html5QrcodeScanner(
     "qr-reader", { fps: 10, qrbox: 250 });
 var lastResult = ""
+var localStoredStatus = ""
 /*
 Local Stored Data is stored encrypted with the following structure:
 var localStoredData = {
@@ -114,6 +115,7 @@ async function showPassword() {
         localStoredData["users"] = {};
     }
     if (!localStoredData["users"][userOrMailField.value]) {
+        alert("A password for a new user or email is being created.")
         localStoredData["users"][userOrMailField.value] = {};
     }
     // Check if the site input is empty
@@ -125,7 +127,7 @@ async function showPassword() {
 
 
 
-
+    if (!privateKeyField.value) {
         try {
             const isValid = await verifyBip39SeedPhrase(mnemonicField.value, words);
             if (isValid) {
@@ -137,10 +139,11 @@ async function showPassword() {
         } catch (error) {
             console.error('An error verifying seed phrase occurred:', error);
         }
-
+    }
     
     // Initialize or load the nonce for the site
     if (!nonces[siteField.value]) {
+        alert("A password for a new site is being created.")
         localStoredData["users"][userOrMailField.value][siteField.value] = 0;
         nonces = localStoredData["users"][userOrMailField.value]
         console.log(`Initialized nonce for site: ${siteField.value} el nonce es: ${nonces[siteField.value]}`);
@@ -485,9 +488,14 @@ function loadEncryptedData() {
         }
 
         console.log('Decrypted data:', decryptedData);
-        alert('Data loaded successfully.');
         localStoredData = JSON.parse(decryptedData)
+        if(!localStoredData["privateKey"]){
+            alert("There is no private key in the decrypted storage.")
+            return;
+        }
         privateKeyField.value = localStoredData["privateKey"]
+        localStoredStatus = "loaded"
+        alert('Data loaded successfully.');
         return localStoredData; // Parse the JSON string back into an object
     } catch (error) {
         console.error('Error during decryption or parsing:', error.message);
@@ -506,7 +514,15 @@ function saveEncryptedData() {
         alert('There is no data to save.');
         return;
     }
-
+    if(localStoredStatus === "loaded"){
+        alert("Overwriting encrypted storage, press again to confirm.")
+        localStoredStatus = "confirmingDeletion"
+        return;
+    }
+    if(localStoredStatus === "confirmingDeletion"){
+        localStoredStatus = ""
+        return;
+    }
     localStoredData["privateKey"] = privateKeyField.value
 
     const key = hashPassword(password); // Use the hashed password as the dictionary key
@@ -526,5 +542,18 @@ function deleteEncryptedData(){
     localStorage.setItem("encryptedDataStorage", JSON.stringify({}));
     console.log("Encrypted Storage Deleted Succesfully")
 }
+
+const passwordInput = document.getElementById("encryptionPassword");
+const togglePassword = document.getElementById("togglePassword");
+
+togglePassword.addEventListener("click", function () {
+    // Toggle password visibility
+    const type =
+        passwordInput.getAttribute("type") === "password" ? "text" : "password";
+    passwordInput.setAttribute("type", type);
+
+    // Change the icon (optional)
+    this.textContent = type === "password" ? "👁️" : "🙈";
+});
 
 // Missing HEX to Bip39 Mnemonic

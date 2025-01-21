@@ -1,6 +1,6 @@
 # Password Manager
 ## Overview
-This Password Manager is a web application designed to securely generate and manage passwords using mnemonic phrases and QR code scanning. It leverages cryptographic functions to ensure strong password generation and provides a user-friendly interface for managing site-specific passwords.
+This Password Manager is a web application designed to securely generate passwords using, a mnemonic phrase as master key, nonces for each site/user to be able to update and change passwords still deterministically, and optional encryption/decryption of the local stored data to not having to input each time the private master key.
 
 ## Features
 Mnemonic Phrase Generation and Validation: Generate and validate BIP-39 mnemonic phrases to ensure secure password derivation.
@@ -52,3 +52,12 @@ License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 Contact
 For questions or support, please contact [Your Name] at [Your Email].
+
+## Tasks 
+- [x] Alerting when a new website is detected when creating a password, avoiding typos. (just useful if there was previousStoredData)
+- [x] Alerting in the same way when a new user/email is detected
+- [ ] Export/ Import of localStorage
+- [ ] Converting hex private key to words again if needed (button)
+- [ ] Is there any way to set temporal duration to the localStorage data? (Check example script)
+- [ ] Pressing two times to overwrite encrypted data (alert first)
+- [ ] If different passwords are input everything will fail, alerts will fail, the page needs to be refreshed for that.
