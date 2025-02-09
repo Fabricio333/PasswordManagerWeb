@@ -494,6 +494,8 @@ function loadEncryptedData() {
             return;
         }
         privateKeyField.value = localStoredData["privateKey"]
+        /*mnemonicField.value = HexToMnemonic()
+        */
         localStoredStatus = "loaded"
         alert('Data loaded successfully.');
         return localStoredData; // Parse the JSON string back into an object
