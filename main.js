@@ -4,6 +4,7 @@ var nonceField = document.getElementById('nonce')
 var mnemonicField = document.getElementById('mnemonicField')
 var userOrMailField = document.getElementById('userOrMail')
 var privateKeyField = document.getElementById('privateKey')
+var settingsField = document.getElementById("settings")
 var localStoredData = {}
 var html5QrcodeScanner = new Html5QrcodeScanner(
     "qr-reader", { fps: 10, qrbox: 250 });
@@ -537,6 +538,10 @@ function saveEncryptedData() {
     console.log('Data saved with hashed key:', key);
     console.log('Data:', existingData[key]);
     alert("Data encrypted succesfully")
+}
+
+function exportLocalStorage() {
+    settingsField.value = JSON.stringify(localStoredData, null, 2); // Pretty-print JSON
 }
 
 
