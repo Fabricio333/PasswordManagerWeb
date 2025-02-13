@@ -153,6 +153,13 @@
             border-radius: 8px;
             font-family: monospace; /* Aligns words neatly */
         }
+        #seedPhraseField {
+            height: 100px; /* Adjust height as needed */
+            resize: vertical; /* Allow vertical resizing */
+            width: 100%; /* Ensure it takes full width */
+            padding: 10px; /* Add padding for better readability */
+            box-sizing: border-box; /* Include padding in the element's total width and height */
+        }
     </style>
 </head>
 
@@ -167,7 +174,7 @@
     <button class="option-btn" onclick="showScreen('decryptScreen')">
         Load Encrypted Key and Data
     </button>
-    <button class="option-btn" onclick="showScreen('newMnemonicScreen')">
+    <button class="option-btn" onclick="showScreen('newMnemonicScreen');generateValidMnemonic()">
         Create a new Private Key
     </button>
 </div>
@@ -202,7 +209,18 @@
         Decrypt Local Storage
     </button>
 </div>
+<!-- Generation Screen -->
+<div class="screen hidden" id="newMnemonicScreen">
+    <h2 class="title">Generate a New Mnemonic</h2>
+    <p>Make sure you back up your seed phrase in a secure location, preferably offline.</p>
 
+    <div class="input-group">
+        <label for="seedPhraseField" class="input-label">Seed Phrase:</label>
+        <textarea class="input-field" id="seedPhraseField" readonly></textarea>
+    </div>
+
+    <button class="option-btn">I understand.</button>
+</div>
 <!-- Management Screen -->
 <div class="screen hidden" id="managementScreen">
     <h2 class="title">Manage Credentials</h2>

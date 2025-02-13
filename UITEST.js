@@ -4,6 +4,7 @@ var userOrMailField = document.getElementById("userOrMailField");
 var siteField = document.getElementById("siteField");
 var passwordField = document.getElementById("passwordField");
 var nonceField = document.getElementById("nonceField");
+var seedPhraseField = document.getElementById("seedPhraseField");
 
 // Simple screen navigation logic
 function showScreen(screenId) {
@@ -170,4 +171,62 @@ async function showPassword() {
 
         const entropiaContraseña = hash(concatenado).substring(0, 16);
         passwordField.value = 'PASS' + entropiaContraseña + '249+';
+}
+
+function generateValidMnemonic() {
+    if (words.length !== 2048) {
+        throw new Error("The wordlist must contain exactly 2048 words.");
+    }
+
+    // Step 1: Generate cryptographically secure random entropy
+    function generateEntropy(bytes = 16) {
+        if (window.crypto && window.crypto.getRandomValues) {
+            const entropy = new Uint8Array(bytes);
+            window.crypto.getRandomValues(entropy);
+            return entropy;
+        } else {
+            throw new Error("Secure random generation not supported in this browser.");
+        }
+    }
+
+    // Step 2: Convert entropy to binary string
+    function entropyToBinary(entropy) {
+        return Array.from(entropy)
+            .map(byte => byte.toString(2).padStart(8, "0"))
+            .join("");
+    }
+
+    // Step 3: Generate checksum (Fixed to handle async digest)
+    async function generateChecksum(entropy) {
+        const hashBuffer = await window.crypto.subtle.digest("SHA-256", entropy);
+        const hashArray = new Uint8Array(hashBuffer);
+        const hashBinary = Array.from(hashArray)
+            .map(byte => byte.toString(2).padStart(8, "0"))
+            .join("");
+        const checksumBits = (entropy.length * 8) / 32; // Entropy length in bits / 32
+        return hashBinary.substring(0, checksumBits);
+    }
+
+    // Step 4: Convert binary to mnemonic words
+    function binaryToMnemonic(binary, wordlist) {
+        const words = [];
+        for (let i = 0; i < binary.length; i += 11) {
+            const index = parseInt(binary.slice(i, i + 11), 2);
+            words.push(wordlist[index]);
+        }
+        return words.join(" ");
+    }
+
+    // Generate the mnemonic
+    return (async () => {
+        const entropy = generateEntropy();
+        const entropyBinary = entropyToBinary(entropy);
+        const checksum = await generateChecksum(entropy); // Await the async checksum
+        const mnemonicBinary = entropyBinary + checksum;
+        var mnemonic = binaryToMnemonic(mnemonicBinary, words)
+        seedPhraseField.value = mnemonic
+        privateKeyField.value = decimalStringToHex(wordsToIndices(mnemonic));        return;
+    })();
+    // Example usage generateValidMnemonic().then(mnemonic => console.log("Generated Mnemonic:", mnemonic)).catch(console.error);
+
 }
