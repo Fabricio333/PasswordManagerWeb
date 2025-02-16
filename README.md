@@ -61,3 +61,5 @@ For questions or support, please contact [Your Name] at [Your Email].
 - [ ] Is there any way to set temporal duration to the localStorage data? (Check example script)
 - [ ] Pressing two times to overwrite encrypted data (alert first)
 - [ ] If different passwords are input everything will fail, alerts will fail, the page needs to be refreshed for that.
+- [ ] Check for empty spaces on inputs and don't allow them
+- [ ] "Enter Pressed on Confirm Screen on management saving encrypted data screen"
