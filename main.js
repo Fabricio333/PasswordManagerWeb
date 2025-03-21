@@ -7,29 +7,62 @@ var nonceField = document.getElementById("nonceField");
 var seedPhraseField = document.getElementById("seedPhraseField");
 var newSeedPhraseField = document.getElementById("newSeedPhraseField");
 var localStoredData = {}
-let currentScreenId = "";
 var localStoredStatus = ""
+// Navigation history stack
+const navigationHistory = ["welcomeScreen"];
+let currentScreenId = "welcomeScreen";
 
-// Simple screen navigation logic
-function showScreen(screenId) {
+// Fixed showScreen function to track navigation history correctly
+function showScreen(screenId, isBackNavigation = false) {
+    // Hide all screens
     document.querySelectorAll('.screen').forEach(screen => {
         screen.classList.add('hidden');
     });
+
+    // Show the target screen
     const targetScreen = document.getElementById(screenId);
     if (targetScreen) {
         targetScreen.classList.remove("hidden");
-        currentScreenId = screenId; // update the current screen id
+
+        // Only update history if this is not a back navigation
+        if (!isBackNavigation && currentScreenId !== screenId) {
+            navigationHistory.push(currentScreenId);
+            currentScreenId = screenId;
+        } else if (isBackNavigation) {
+            // Just update current screen ID without modifying history
+            currentScreenId = screenId;
+        }
+    } else {
+        alert("Screen Change Failed");
     }
-    else{
-        alert("Screen Change Failed")
-    }
+
     // Initialize verification screen if needed
     if (screenId === "verifySeedBackUpScreen") {
         setupVerificationScreen();
         // Clear any previous verification message
-        document.getElementById("verificationResult").textContent = "";// ✅ This creates the input fields
+        document.getElementById("verificationResult").textContent = "";
     }
+
+    console.log("Navigation History:", navigationHistory);
 }
+
+// Improved function to navigate back
+function navigateBack(currentScreen) {
+    // Don't proceed if we're already at the welcome screen or history is empty
+    if (navigationHistory.length <= 1) {
+        showScreen("welcomeScreen", true);
+        navigationHistory.length = 0;
+        navigationHistory.push("welcomeScreen");
+        return;
+    }
+
+    // Get the previous screen
+    const previousScreen = navigationHistory.pop();
+
+    // Show the previous screen with flag to indicate this is a back navigation
+    showScreen(previousScreen, true);
+}
+
 function decimalStringToHex(DecimalString) {
     // Check if the input is a valid number
     if (!/^\d+$/.test(DecimalString)) {

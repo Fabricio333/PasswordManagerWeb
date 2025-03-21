@@ -67,6 +67,40 @@
             transform: translateY(-2px);
         }
 
+        /* Back Button */
+        .back-btn {
+            padding: 0.75rem 1.25rem;
+            border: none;
+            border-radius: 0.75rem;
+            background: #e2e8f0;
+            color: var(--text);
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: auto;
+        }
+
+        .back-btn:hover {
+            background: #cbd5e1;
+        }
+
+        .back-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Navigation Container */
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 1rem;
+        }
+
         /* Input Screens */
         .input-group {
             margin: 1.5rem 0;
@@ -200,7 +234,6 @@
         .copy-button:hover {
             opacity: 1;
         }
-
     </style>
 </head>
 
@@ -235,6 +268,12 @@
     <button class="option-btn" onclick="verifySeedAndMoveNext()">
         Continue
     </button>
+    <button class="back-btn" onclick="navigateBack('recoverScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
 </div>
 
 <!-- Decryption Screen -->
@@ -249,7 +288,14 @@
     <button class="option-btn" onclick="loadEncryptedData()">
         Decrypt Local Storage
     </button>
+    <button class="back-btn" onclick="navigateBack('decryptScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
 </div>
+
 <!-- Generation Screen -->
 <div class="screen hidden" id="newMnemonicScreen">
     <h2 class="title">Generate a New Mnemonic</h2>
@@ -261,7 +307,14 @@
     </div>
 
     <button class="option-btn" onclick="showScreen('verifySeedBackUpScreen')" >I understand.</button>
+    <button class="back-btn" onclick="navigateBack('newMnemonicScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
 </div>
+
 <!-- Seed Back Up Verification Screen -->
 <div class="screen hidden" id="verifySeedBackUpScreen">
     <h2 class="title">Verify Your Seed Phrase</h2>
@@ -271,7 +324,14 @@
 
     <button class="option-btn" id="verifyButton" onclick="verifySeedPhrase()">Verify</button>
     <p id="verificationResult"></p>
+    <button class="back-btn" onclick="navigateBack('verifySeedBackUpScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
 </div>
+
 <!-- Management Screen -->
 <div class="screen hidden" id="managementScreen">
     <h2 class="title">Manage Credentials</h2>
@@ -308,9 +368,16 @@
     </div>
 
     <button class="option-btn" onclick="showPassword()">
-        Show Password    </button>
+        Show Password
+    </button>
     <button class="option-btn" onclick="showScreen('confirmScreen')">
         Save Session Data Encrypted
+    </button>
+    <button class="back-btn" onclick="navigateBack('managementScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
     </button>
 </div>
 
@@ -331,11 +398,18 @@
     <button class="option-btn" onclick="saveEncryptedData()">
         Save Encrypted Data
     </button>
+    <button class="back-btn" onclick="navigateBack('confirmScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
 </div>
 
 <script src="./bip39WordList.js"></script>
 <script src="./crypto-js.min.js"></script>
 <script src="./main.js"></script>
+
 
 </body>
 </html>
