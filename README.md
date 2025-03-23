@@ -1,57 +1,108 @@
-# Password Manager
-## Overview
-This Password Manager is a web application designed to securely generate passwords using, a mnemonic phrase as master key, nonces for each site/user to be able to update and change passwords still deterministically, and optional encryption/decryption of the local stored data to not having to input each time the private master key.
+# Password Manager v2: A Secure and Deterministic Approach
 
-## Features
-Mnemonic Phrase Generation and Validation: Generate and validate BIP-39 mnemonic phrases to ensure secure password derivation.
-QR Code Scanning: Use the QR code scanner to input entropy for password generation.
-Secure Password Generation: Generate strong, site-specific passwords using a combination of mnemonic phrases, user credentials, and site information.
-Nonce Management: Automatically manage nonces for each site to ensure unique password generation.
-Local Storage: Save nonces and settings locally for persistence across sessions.
-Clipboard Copying: Easily copy generated passwords and settings to the clipboard for quick access.
-Settings Export/Import: Export and import settings to backup or restore your configuration.
-Reset Functions: Reset nonces and settings to start fresh if needed.
-How to Use
-Setup:
-Ensure your browser supports the necessary cryptographic APIs.
-Open the application in a web browser.
-Generating a Mnemonic:
-Use the "Generate Mnemonic" feature to create a new BIP-39 seed phrase.
-Validate the mnemonic using the provided wordlist.
-QR Code Scanning:
-Use the QR code scanner to input entropy for your password generation.
-Password Generation:
-Enter the site name, user credentials, and mnemonic phrase.
-Click "Show Password" to generate a password for the specified site.
-Use "New Password" to increment the nonce and generate a new password.
-Managing Nonces:
-Nonces are automatically managed and stored in local storage.
-Use "Reset Nonces" to clear all stored nonces.
-Settings Management:
-Export settings to backup your configuration.
-Import settings to restore from a backup.
-Copying to Clipboard:
-Use the "Copy" feature to copy passwords and settings to the clipboard.
-Completed Tasks
-Implemented mnemonic phrase generation and validation.
-Integrated QR code scanning for entropy input.
-Developed secure password generation logic.
-Implemented nonce management and local storage functionality.
-Added settings export and import features.
-Created clipboard copying functionality.
-Developed user interface for all core features.
-Pending Tasks
-Implement cloud synchronization for nonces and settings.
-Enhance user interface for better usability and aesthetics.
-Add support for additional languages in the wordlist.
-Improve error handling and user feedback for edge cases.
-Conduct thorough testing for edge cases and security vulnerabilities.
-Contributing
-Contributions are welcome! Please feel free to submit a pull request or open an issue for any bugs or feature requests.
-License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-Contact
-For questions or support, please contact [Your Name] at [Your Email].
+## Table of Contents
+- [Why Use This Password Manager?](#why-use-this-password-manager)
+- [Getting Started](#getting-started)
+  - [Access the Web Version](#access-the-web-version)
+  - [Set Up Your Mnemonic Key](#set-up-your-mnemonic-key)
+  - [Generate a Password](#generate-a-password)
+  - [Encrypt Local Data (Optional)](#encrypt-local-data-optional)
+  - [Backup Your Seed Phrase](#backup-your-seed-phrase)
+  - [Decrypt Stored Data](#decrypt-stored-data)
+- [Using It Offline & On Mobile Devices](#using-it-offline--on-mobile-devices)
+  - [Offline Usage](#offline-usage)
+  - [Mobile Access](#mobile-access)
+- [Potential Risks & Considerations](#potential-risks--considerations)
+- [Final Thoughts](#final-thoughts)
+- [Source Code](#source-code)
+
+## **Introduction**
+
+In today's digital world, managing passwords securely is crucial. Many password managers store your passwords online, posing potential security risks. However, this open-source Password Manager offers a unique approach: it deterministically generates different passwords for different sites and users, ensuring security without storing any passwords online. This means you can use it entirely offline and even on mobile devices without an internet connection.
+
+---
+
+## **Why Use This Password Manager?**
+
+- **No Central Storage:** No passwords are stored on any server, reducing the risk of data breaches.
+- **Deterministic Password Generation:** Each password is generated based on user input, meaning you get consistent passwords for the same credentials.
+- **Offline Usage:** Works completely without an internet connection.
+- **BIP39 Backup & Recovery:** Backing up the master key with a set of words, like on Bitcoin, ensures you never lose access to your credentials.
+- **Nonce System for Changes:** Allows password updates while maintaining security and determinism on passwords creation.
+- **Encryption for Local Storage:** Optionally encrypts locallly the nonces state and the private key, for convenience.
+
+---
+
+## **Getting Started**
+
+### **Access the Web Version**  
+Open the Password Manager here: [Password Manager Web](https://fabricio333.github.io/PasswordManagerWeb/).
+   
+![Getting Started](https://m.primal.net/OzRc.png)
+   
+### **Set Up Your Mnemonic Key**  
+The manager uses a BIP39 mnemonic key for secure backup and recovery. When you first start, you will need to generate and back up a seed phrase that acts as your master key.
+   
+![BIP39 Key Recovery](https://m.primal.net/OzRe.png)
+   
+### **Generate a Password**  
+- Enter your **Username** or **Email**.
+- Enter the **Website URL**.
+- Let the **Nonce** on 0 if is the first password for that credentials, and modify it if you need other password.
+- Press the button 
+![Password Creation](https://m.primal.net/OzRg.png)
+   
+### **Encrypt Local Data (Optional)**  
+You can choose to encrypt the private key and the nonces/sites data to speed up future access.
+   
+![Encryption Option](https://m.primal.net/OzRm.png)
+   
+### **Backup Your Seed Phrase**  
+Write down and securely store your seed phrase for account recovery.
+   
+![Backup Seed Phrase](https://m.primal.net/OzRn.png)  
+![Confirm Seed Phrase](https://m.primal.net/OzRo.png)
+   
+### **Decrypt Stored Data**  
+If you encrypted your data, you can decrypt it to retrieve your information.
+   
+![Decrypt Data](https://m.primal.net/OzRp.png)
+
+---
+
+## **Using It Offline & On Mobile Devices**
+
+### **Offline Usage**
+This password manager does not require an internet connection. You can save the web page for offline use or run it locally by downloading the source code from the GitHub repository.
+
+### **Mobile Access**
+- You can open the web version in your mobile browser.
+- If you want a dedicated app experience, you can add the webpage to your home screen for easy access.
+- Since it doesn’t store data online, you’ll need to remember your mnemonic key for access across devices.
+
+---
+
+## **Potential Risks & Considerations**
+
+While this method is highly secure, users should keep these factors in mind:
+
+- **Mnemonic Key Security:** Losing your seed phrase means you lose access to your passwords.
+- **Local Storage Encryption:** If you encrypt your local data, ensure you remember your decryption password.
+- **No Recovery Without Backup:** Unlike cloud-based password managers, if you lose your mnemonic key and haven’t backed it up, you cannot recover your credentials.
+- **Phishing Risks:** Since passwords are generated deterministically, always verify you’re entering the correct site URL to avoid phishing attacks.
+
+---
+
+## **Final Thoughts**
+
+This password manager provides a secure, offline, and deterministic approach to managing credentials. By utilizing BIP39 for backup and recovery and eliminating central storage, it ensures maximum security while maintaining user control. Whether you're looking for a simple and secure way to manage passwords or a fully offline solution, this tool is an excellent choice.
+
+Try it out today: [Password Manager Web](https://fabricio333.github.io/PasswordManagerWeb/)
+
+## **Source Code**
+Explore the full source code on GitHub: [GitHub Repository](https://github.com/fabricio333/PasswordManagerWeb)
+
+
 
 ## Tasks 
 - [x] Alerting when a new website is detected when creating a password, avoiding typos. (just useful if there was previousStoredData)
