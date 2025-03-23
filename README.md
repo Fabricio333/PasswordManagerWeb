@@ -49,11 +49,12 @@ The manager uses a BIP39 mnemonic key for secure backup and recovery. When you f
 - Enter your **Username** or **Email**.
 - Enter the **Website URL**.
 - Let the **Nonce** on 0 if is the first password for that credentials, and modify it if you need other password.
-- Press the button 
+- Press the **Show Password** button to generate the password for that credentials.
+ 
 ![Password Creation](https://m.primal.net/OzRg.png)
    
 ### **Encrypt Local Data (Optional)**  
-You can choose to encrypt the private key and the nonces/sites data to speed up future access.
+You can choose to encrypt and save locally the private key and the nonces/sites data to speed up future access.
    
 ![Encryption Option](https://m.primal.net/OzRm.png)
    
@@ -61,6 +62,7 @@ You can choose to encrypt the private key and the nonces/sites data to speed up 
 Write down and securely store your seed phrase for account recovery.
    
 ![Backup Seed Phrase](https://m.primal.net/OzRn.png)  
+
 ![Confirm Seed Phrase](https://m.primal.net/OzRo.png)
    
 ### **Decrypt Stored Data**  
@@ -73,12 +75,7 @@ If you encrypted your data, you can decrypt it to retrieve your information.
 ## **Using It Offline & On Mobile Devices**
 
 ### **Offline Usage**
-This password manager does not require an internet connection. You can save the web page for offline use or run it locally by downloading the source code from the GitHub repository.
-
-### **Mobile Access**
-- You can open the web version in your mobile browser.
-- If you want a dedicated app experience, you can add the webpage to your home screen for easy access.
-- Since it doesn’t store data online, you’ll need to remember your mnemonic key for access across devices.
+This password manager does not require an internet connection. You can save the web page for offline use simply by clicking on save here on desktop, or run it locally by downloading the source code from the GitHub repository and executing it directly from the phone files manager.
 
 ---
 
@@ -86,11 +83,12 @@ This password manager does not require an internet connection. You can save the 
 
 While this method is highly secure, users should keep these factors in mind:
 
-- **Mnemonic Key Security:** Losing your seed phrase means you lose access to your passwords.
+- **Mnemonic Key Security:** Losing your seed phrase means you lose access to your passwords, create redundant back ups of the keys.
 - **Local Storage Encryption:** If you encrypt your local data, ensure you remember your decryption password.
 - **No Recovery Without Backup:** Unlike cloud-based password managers, if you lose your mnemonic key and haven’t backed it up, you cannot recover your credentials.
 - **Phishing Risks:** Since passwords are generated deterministically, always verify you’re entering the correct site URL to avoid phishing attacks.
-
+- **Other Users of the Same PC:** Other users could brute force the encrypted back up, make sure you use it in trusted devices and in the case of losing one device make sure you change all the passwords with a new master keys.
+- **Browsers Vulnerabilities:** Being browsers the most critical part of devices the risk of a vulnerability, trojan attack, etc exists.
 ---
 
 ## **Final Thoughts**
