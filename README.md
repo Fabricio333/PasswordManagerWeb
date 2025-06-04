@@ -77,6 +77,12 @@ If you encrypted your data, you can decrypt it to retrieve your information.
 ### **Offline Usage**
 This password manager does not require an internet connection. You can save the web page for offline use simply by clicking on save here on desktop, or run it locally by downloading the source code from the GitHub repository and executing it directly from the phone files manager.
 
+### **Mobile Access**
+An Android wrapper is provided in the `android` folder. Tag your commit with `v*`
+or run the GitHub Actions workflow manually to build the APK automatically. The
+generated file is attached to the release so you can install it on your device
+without setting up Android Studio.
+
 ---
 
 ## **Potential Risks & Considerations**
