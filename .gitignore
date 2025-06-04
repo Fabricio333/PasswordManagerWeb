@@ -1,0 +1,7 @@
+# Ignore Gradle build cache and wrappers
+android/.gradle/
+android/app/build/
+
+# Ignore IDE folders
+.idea/
+android/build/
