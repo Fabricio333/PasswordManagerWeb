@@ -4,11 +4,15 @@ This is a minimal Android project that loads the existing web application in a `
 
 ## Building
 
+
 1. Install [Android Studio](https://developer.android.com/studio) and make sure the Android SDK is set up.
 2. Start Android Studio and choose **File → Open**. Select the `android` folder from this repository.
 3. Let Gradle download dependencies and finish syncing the project.
 4. Choose **Build → Build APK(s)**. The resulting APK is written to `app/build/outputs/apk/release`.
 5. You can install this APK on a device or emulator for testing.
+=======
+Use Android Studio to open the `android` directory and build the project.
+
 
 ### GitHub Release
 
