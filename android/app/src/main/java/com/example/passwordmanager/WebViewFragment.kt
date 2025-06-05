@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -50,7 +51,7 @@ class WebViewFragment : Fragment() {
 
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
-                        loadWebApp()
+                        Toast.makeText(requireContext(), "Authentication failed: $errString", Toast.LENGTH_LONG).show()
                     }
                 })
 
@@ -65,6 +66,7 @@ class WebViewFragment : Fragment() {
 
             biometricPrompt.authenticate(promptInfo)
         } else {
+            Toast.makeText(requireContext(), "Biometric authentication unavailable", Toast.LENGTH_LONG).show()
             loadWebApp()
         }
     }

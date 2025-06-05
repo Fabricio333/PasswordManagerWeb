@@ -3,4 +3,6 @@
     <color name="purple_500">#6200EE</color>
     <color name="purple_700">#3700B3</color>
     <color name="teal_200">#03DAC5</color>
+    <color name="brand_primary">#075E54</color>
+    <color name="brand_primary_dark">#044539</color>
 </resources>
