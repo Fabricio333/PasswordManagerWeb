@@ -4,14 +4,14 @@ plugins {
 }
 
 android {
-    compileSdk 33
+    compileSdk 36
 
     namespace "com.example.passwordmanager"
 
     defaultConfig {
         applicationId "com.example.passwordmanager"
         minSdk 24
-        targetSdk 33
+        targetSdk 36
         versionCode 1
         versionName "1.0"
     }
