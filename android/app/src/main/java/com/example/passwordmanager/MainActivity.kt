@@ -3,6 +3,7 @@ package com.example.passwordmanager
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
+import androidx.biometric.BiometricManager
 import androidx.core.content.ContextCompat
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -14,6 +15,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         webView = WebView(this)
         webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+        webView.settings.allowFileAccess = true
         webView.webViewClient = WebViewClient()
         setContentView(webView)
 
@@ -21,21 +24,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun authenticateAndLoad() {
-        val executor = ContextCompat.getMainExecutor(this)
-        val biometricPrompt = BiometricPrompt(this, executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    webView.loadUrl("file:///android_asset/www/index.html")
-                }
-            })
+        val biometricManager = BiometricManager.from(this)
+        val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock")
-            .setSubtitle("Authenticate to decrypt your private key")
-            .setNegativeButtonText("Cancel")
-            .build()
+        if (canAuth == BiometricManager.BIOMETRIC_SUCCESS) {
+            val executor = ContextCompat.getMainExecutor(this)
+            val biometricPrompt = BiometricPrompt(this, executor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        loadWebApp()
+                    }
 
-        biometricPrompt.authenticate(promptInfo)
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        loadWebApp()
+                    }
+                })
+
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock")
+                .setSubtitle("Authenticate to decrypt your private key")
+                .setNegativeButtonText("Cancel")
+                .build()
+
+            biometricPrompt.authenticate(promptInfo)
+        } else {
+            loadWebApp()
+        }
+    }
+
+    private fun loadWebApp() {
+        webView.loadUrl("file:///android_asset/www/index.html")
     }
 }
