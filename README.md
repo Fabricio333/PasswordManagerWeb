@@ -6,9 +6,7 @@
   - [Access the Web Version](#access-the-web-version)
   - [Set Up Your Mnemonic Key](#set-up-your-mnemonic-key)
   - [Generate a Password](#generate-a-password)
-  - [Encrypt Local Data (Optional)](#encrypt-local-data-optional)
   - [Backup Your Seed Phrase](#backup-your-seed-phrase)
-  - [Decrypt Stored Data](#decrypt-stored-data)
 - [Using It Offline & On Mobile Devices](#using-it-offline--on-mobile-devices)
   - [Offline Usage](#offline-usage)
   - [Mobile Access](#mobile-access)
@@ -29,7 +27,7 @@ In today's digital world, managing passwords securely is crucial. Many password 
 - **Offline Usage:** Works completely without an internet connection.
 - **BIP39 Backup & Recovery:** Backing up the master key with a set of words, like on Bitcoin, ensures you never lose access to your credentials.
 - **Nonce System for Changes:** Allows password updates while maintaining security and determinism on passwords creation.
-- **Encryption for Local Storage:** Optionally encrypts locallly the nonces state and the private key, for convenience.
+- **Secure Local Storage:** On Android, data is protected by the device's encryption.
 
 ---
 
@@ -52,25 +50,14 @@ The manager uses a BIP39 mnemonic key for secure backup and recovery. When you f
 - Press the **Show Password** button to generate the password for that credentials.
  
 ![Password Creation](https://m.primal.net/OzRg.png)
-   
-### **Encrypt Local Data (Optional)**  
-You can choose to encrypt and save locally the private key and the nonces/sites data to speed up future access.
-   
-![Encryption Option](https://m.primal.net/OzRm.png)
-   
-### **Backup Your Seed Phrase**  
+
+### **Backup Your Seed Phrase**
 Write down and securely store your seed phrase for account recovery.
    
 ![Backup Seed Phrase](https://m.primal.net/OzRn.png)  
 
 ![Confirm Seed Phrase](https://m.primal.net/OzRo.png)
    
-### **Decrypt Stored Data**  
-If you encrypted your data, you can decrypt it to retrieve your information.
-   
-![Decrypt Data](https://m.primal.net/OzRp.png)
-
----
 
 ## **Using It Offline & On Mobile Devices**
 
@@ -103,7 +90,7 @@ The Android app now includes a native bottom navigation bar and Material styling
 While this method is highly secure, users should keep these factors in mind:
 
 - **Mnemonic Key Security:** Losing your seed phrase means you lose access to your passwords, create redundant back ups of the keys.
-- **Local Storage Encryption:** If you encrypt your local data, ensure you remember your decryption password.
+- **Local Data Security:** Local data is stored using your device's encryption. Avoid using untrusted browsers.
 - **No Recovery Without Backup:** Unlike cloud-based password managers, if you lose your mnemonic key and haven’t backed it up, you cannot recover your credentials.
 - **Phishing Risks:** Since passwords are generated deterministically, always verify you’re entering the correct site URL to avoid phishing attacks.
 - **Other Users of the Same PC:** Other users could brute force the encrypted back up, make sure you use it in trusted devices and in the case of losing one device make sure you change all the passwords with a new master keys.
@@ -127,7 +114,5 @@ Explore the full source code on GitHub: [GitHub Repository](https://github.com/f
 - [ ] Export/ Import of localStorage
 - [ ] Converting hex private key to words again if needed (button)
 - [ ] Is there any way to set temporal duration to the localStorage data? (Check example script)
-- [ ] Pressing two times to overwrite encrypted data (alert first)
 - [ ] If different passwords are input everything will fail, alerts will fail, the page needs to be refreshed for that.
 - [ ] Check for empty spaces on inputs and don't allow them
-- [ ] "Enter Pressed on Confirm Screen on management saving encrypted data screen"

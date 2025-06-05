@@ -448,107 +448,37 @@ function copyElementToClipboard(element) {
 }
 
 function loadDictionary(key) {
-    // Check if the key exists in localStorage
     const storedData = localStorage.getItem(key);
-    // If data exists, parse it, otherwise return an empty object
-    if (storedData) {
-        return JSON.parse(storedData);
-    } else {
-        return {};  // Return an empty object if nothing is found
-    }
+    return storedData ? JSON.parse(storedData) : {};
 }
 
 function saveDictionary(key, dictionary) {
-    // Convert the dictionary to a JSON string and save it in localStorage
     localStorage.setItem(key, JSON.stringify(dictionary));
-    console.log('Dict Saved')
+    console.log('Dict Saved');
 }
 
-function loadEncryptedData() {
-    const passwordInput = document.getElementById('encryptionPassword');
-    const password = passwordInput.value.trim();
-    if (!password || !passwordInput) {
-        alert('No password to load encrypted data, no local storage will be used.');
-        return {};
+function loadLocalData() {
+    const stored = loadDictionary('vaultData');
+    if (!stored || !stored.privateKey) {
+        alert('No stored data found.');
+        return;
     }
-
-    try {
-        const key = hash(password); // Use the hashed password to retrieve the encrypted data
-        const storedData = loadDictionary("encryptedDataStorage") || {}; // Load the dictionary
-
-        if (!storedData || typeof storedData !== 'object') {
-            alert('No stored data found or invalid data format.');
-            return;
-        }
-
-        const encryptedData = storedData[key]; // Retrieve the encrypted data using the hashed key
-        if (!encryptedData) {
-            alert('No data found for the provided password.');
-            return;
-        }
-
-        console.log('Encrypted data:', encryptedData);
-
-        // Decrypt the data using the raw password
-        const decryptedBytes = CryptoJS.AES.decrypt(encryptedData, password);
-        const decryptedData = decryptedBytes.toString(CryptoJS.enc.Utf8);
-
-        if (!decryptedData) {
-            throw new Error('Failed to decrypt data. Possibly malformed UTF-8.');
-        }
-
-        console.log('Decrypted data:', decryptedData);
-        localStoredData = JSON.parse(decryptedData)
-        if(!localStoredData["privateKey"]){
-            alert("There is no private key in the decrypted storage.")
-            return;
-        }
-        privateKeyField.value = localStoredData["privateKey"]
-        localStoredStatus = "loaded"
-        alert('Data loaded successfully.');
-        showScreen("managementScreen")
-        return localStoredData; // Parse the JSON string back into an object
-    } catch (error) {
-        console.error('Error during decryption or parsing:', error.message);
-        alert('Failed to decrypt. Invalid password or corrupted data.');
-    }
+    localStoredData = stored;
+    privateKeyField.value = stored.privateKey;
+    localStoredStatus = 'loaded';
+    alert('Data loaded successfully.');
+    showScreen('managementScreen');
 }
 
-function saveEncryptedData() {
-    const password1 = document.getElementById('encryptPass1').value;
-    const password2 = document.getElementById('encryptPass2').value;
-    if(password1!==password2) {
-        alert('Password do not match.');
-        return;
-    }
-    if (!password1) {
-        alert('Please enter a password.');
-        return;
-    }
-
+function saveLocalData() {
     if (Object.keys(localStoredData).length === 0) {
         alert('There is no data to save.');
         return;
     }
-    if(localStoredStatus === "loaded"){
-        alert("Overwriting encrypted storage, press again to confirm.")
-        localStoredStatus = ""
-        return;
-    }
-
-    localStoredData["privateKey"] = privateKeyField.value
-
-    const key = hash(password1); // Use the hashed password as the dictionary key
-    const encrypted = CryptoJS.AES.encrypt(JSON.stringify(localStoredData), password1).toString(); // Encrypt with the raw password
-
-    // Load existing dictionary from localStorage
-    const existingData = loadDictionary("encryptedDataStorage") || {};
-    existingData[key] = encrypted; // Save the encrypted data using the hashed password as the key
-    saveDictionary("encryptedDataStorage", existingData); // Save back to localStorage
-    console.log('Data saved with hashed key:', key);
-    console.log('Data:', existingData[key]);
-    alert("Data encrypted succesfully")
-    refreshPage()
+    localStoredData['privateKey'] = privateKeyField.value;
+    saveDictionary('vaultData', localStoredData);
+    alert('Data saved locally');
+    refreshPage();
 }
 
 function refreshPage() {

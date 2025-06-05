@@ -245,8 +245,8 @@
     <button class="option-btn" onclick="showScreen('recoverScreen')">
         Load Key With Seed Phrase
     </button>
-    <button class="option-btn" onclick="showScreen('decryptScreen')">
-        Load Key From Local Storage
+    <button class="option-btn" onclick="loadLocalData()">
+        Load Local Data
     </button>
     <button class="option-btn" onclick="showScreen('newMnemonicScreen');generateValidMnemonic()">
         Generate New Key
@@ -279,25 +279,6 @@
     </button>
 </div>
 
-<!-- Decryption Screen -->
-<div class="screen hidden" id="decryptScreen">
-    <h2 class="title">Decrypt Data</h2>
-
-    <div class="input-group">
-        <label class="input-label">Decryption Password</label>
-        <input type="password" class="input-field" id="encryptionPassword">
-    </div>
-
-    <button class="option-btn" onclick="loadEncryptedData()">
-        Decrypt Local Storage
-    </button>
-    <button class="back-btn" onclick="navigateBack('decryptScreen')">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back
-    </button>
-</div>
 
 <!-- Generation Screen -->
 <div class="screen hidden" id="newMnemonicScreen">
@@ -373,8 +354,8 @@
     <button class="option-btn" onclick="showPassword()">
         Show Password
     </button>
-    <button class="option-btn" onclick="showScreen('confirmScreen')">
-        Save Session Data Encrypted
+    <button class="option-btn" onclick="saveLocalData()">
+        Save Session Data
     </button>
     <button class="back-btn" onclick="navigateBack('managementScreen')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -384,30 +365,6 @@
     </button>
 </div>
 
-<!-- Encryption Confirmation -->
-<div class="screen hidden" id="confirmScreen">
-    <h2 class="title">Encrypt Session Data</h2>
-    <p>Be Careful, it stores the private master key</p>
-    <div class="input-group">
-        <label class="input-label">Encryption Password</label>
-        <input type="password" class="input-field" id="encryptPass1">
-    </div>
-
-    <div class="input-group">
-        <label class="input-label">Repeat Password</label>
-        <input type="password" class="input-field" id="encryptPass2">
-    </div>
-
-    <button class="option-btn" onclick="saveEncryptedData()">
-        Save Encrypted Data
-    </button>
-    <button class="back-btn" onclick="navigateBack('confirmScreen')">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back
-    </button>
-</div>
 
 <script src="./bip39WordList.js"></script>
 <script src="./crypto-js.min.js"></script>
