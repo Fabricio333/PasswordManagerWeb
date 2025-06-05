@@ -78,6 +78,16 @@ If you encrypted your data, you can decrypt it to retrieve your information.
 This password manager does not require an internet connection. You can save the web page for offline use simply by clicking on save here on desktop, or run it locally by downloading the source code from the GitHub repository and executing it directly from the phone files manager.
 
 ### **Mobile Access**
+
+An Android wrapper is provided in the `android` folder. If you tag your commit
+with `v*` or run the GitHub Actions workflow manually, the APK will be built and
+attached to the release automatically.  To build it yourself:
+
+1. Install Android Studio and open the `android` directory as a project.
+2. Wait for Gradle to sync and download dependencies.
+3. From the menu choose **Build → Build APK(s)**.
+4. The generated file will appear under `app/build/outputs/apk/release`.
+=======
 An Android wrapper is provided in the `android` folder. Tag your commit with `v*`
 or run the GitHub Actions workflow manually to build the APK automatically. The
 generated file is attached to the release so you can install it on your device
