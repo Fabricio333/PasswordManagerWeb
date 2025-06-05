@@ -93,6 +93,9 @@ or run the GitHub Actions workflow manually to build the APK automatically. The
 generated file is attached to the release so you can install it on your device
 without setting up Android Studio.
 
+### **Improved Android Experience**
+The Android app now includes a native bottom navigation bar and Material styling for better responsiveness. Stored data is decrypted using a hardware-backed key that requires your fingerprint or device PIN each time.
+
 ---
 
 ## **Potential Risks & Considerations**

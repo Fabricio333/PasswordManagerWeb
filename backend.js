@@ -465,6 +465,24 @@ function saveDictionary(key, dictionary) {
 }
 
 function loadEncryptedData() {
+    if (window.Android && window.Android.loadEncryptedData) {
+        const decrypted = window.Android.loadEncryptedData();
+        if (!decrypted) {
+            alert('No data stored securely on this device.');
+            return {};
+        }
+        localStoredData = JSON.parse(decrypted);
+        if(!localStoredData["privateKey"]){
+            alert("There is no private key in the decrypted storage.");
+            return;
+        }
+        privateKeyField.value = localStoredData["privateKey"];
+        localStoredStatus = "loaded";
+        alert('Data loaded successfully.');
+        showScreen("managementScreen");
+        return localStoredData;
+    }
+
     const passwordInput = document.getElementById('encryptionPassword');
     const password = passwordInput.value.trim();
     if (!password || !passwordInput) {
@@ -515,6 +533,23 @@ function loadEncryptedData() {
 }
 
 function saveEncryptedData() {
+    if (window.Android && window.Android.saveEncryptedData) {
+        if (Object.keys(localStoredData).length === 0) {
+            alert('There is no data to save.');
+            return;
+        }
+        if(localStoredStatus === "loaded"){
+            alert("Overwriting encrypted storage, press again to confirm.");
+            localStoredStatus = "";
+            return;
+        }
+        localStoredData["privateKey"] = privateKeyField.value;
+        window.Android.saveEncryptedData(JSON.stringify(localStoredData));
+        alert("Data encrypted succesfully");
+        refreshPage();
+        return;
+    }
+
     const password1 = document.getElementById('encryptPass1').value;
     const password2 = document.getElementById('encryptPass2').value;
     if(password1!==password2) {
@@ -531,24 +566,21 @@ function saveEncryptedData() {
         return;
     }
     if(localStoredStatus === "loaded"){
-        alert("Overwriting encrypted storage, press again to confirm.")
-        localStoredStatus = ""
+        alert("Overwriting encrypted storage, press again to confirm.");
+        localStoredStatus = "";
         return;
     }
 
-    localStoredData["privateKey"] = privateKeyField.value
+    localStoredData["privateKey"] = privateKeyField.value;
 
     const key = hash(password1); // Use the hashed password as the dictionary key
     const encrypted = CryptoJS.AES.encrypt(JSON.stringify(localStoredData), password1).toString(); // Encrypt with the raw password
 
-    // Load existing dictionary from localStorage
     const existingData = loadDictionary("encryptedDataStorage") || {};
-    existingData[key] = encrypted; // Save the encrypted data using the hashed password as the key
-    saveDictionary("encryptedDataStorage", existingData); // Save back to localStorage
-    console.log('Data saved with hashed key:', key);
-    console.log('Data:', existingData[key]);
-    alert("Data encrypted succesfully")
-    refreshPage()
+    existingData[key] = encrypted;
+    saveDictionary("encryptedDataStorage", existingData);
+    alert("Data encrypted succesfully");
+    refreshPage();
 }
 
 function refreshPage() {
