@@ -99,16 +99,6 @@ Try it out today: [Password Manager Web](https://fabricio333.github.io/PasswordM
 
 ## **Source Code**
 Explore the full source code on GitHub: [GitHub Repository](https://github.com/fabricio333/PasswordManagerWeb)
-## Android Project Setup
-The Android app lives in `android`. The Gradle wrapper JAR is omitted from version control.
-To regenerate it, run:
-
-```bash
-cd android
-gradle wrapper
-```
-
-This will create `gradle/wrapper/gradle-wrapper.jar` and update the wrapper scripts.
 
 
 
