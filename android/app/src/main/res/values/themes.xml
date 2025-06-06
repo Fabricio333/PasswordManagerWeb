@@ -4,6 +4,7 @@
         <item name="colorPrimaryContainer">@color/colorPrimaryVariant</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSecondary">@color/colorSecondary</item>
+        <item name="colorSecondaryContainer">@color/colorSecondary</item>
         <item name="android:statusBarColor" tools:targetApi="l">@color/colorPrimaryVariant</item>
         <item name="colorSurface">@color/colorBackground</item>
     </style>
