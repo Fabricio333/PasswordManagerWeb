@@ -1,6 +1,0 @@
-<resources>
-    <string name="app_name">SecurePass</string>
-    <string name="unlock_button">Unlock Vault</string>
-    <string name="save_seed">Save Seed</string>
-    <string name="generate_password">Generate</string>
-</resources>
