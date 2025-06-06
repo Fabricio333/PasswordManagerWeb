@@ -1,4 +1,5 @@
 <resources>
+    <color name="colorSecondary">#03DAC6</color>
     <color name="colorPrimary">#0D47A1</color>
     <color name="colorPrimaryVariant">#1565C0</color>
     <color name="colorSecondary">#FFC107</color>
