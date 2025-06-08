@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">SecurePass Manager</string>
-    <string name="create_key">Create Key</string>
-    <string name="import_key">Import Key</string>
-    <string name="show_password">Show Password</string>
-    <string name="save_key">Save Key</string>
-</resources>
