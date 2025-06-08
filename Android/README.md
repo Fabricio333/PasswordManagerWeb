@@ -11,5 +11,6 @@ The project uses **Kotlin** and **Jetpack Compose**. Due to the minimal setup, y
 - Delete locally stored data from the management panel
 
 ## Building
-Open the `Android` folder with Android Studio (Arctic Fox or newer) and let Gradle sync. The project targets SDK 33.
+Open the `Android` folder with Android Studio (Arctic Fox or newer) and let Gradle sync. The project targets SDK 34.
+
 
