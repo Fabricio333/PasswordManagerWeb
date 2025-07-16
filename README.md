@@ -6,6 +6,7 @@
   - [Access the Web Version](#access-the-web-version)
   - [Set Up Your Mnemonic Key](#set-up-your-mnemonic-key)
   - [Generate a Password](#generate-a-password)
+    - [How Passwords Are Created](#how-passwords-are-created)
   - [Encrypt Local Data (Optional)](#encrypt-local-data-optional)
   - [Backup Your Seed Phrase](#backup-your-seed-phrase)
   - [Decrypt Stored Data](#decrypt-stored-data)
@@ -52,6 +53,24 @@ The manager uses a BIP39 mnemonic key for secure backup and recovery. When you f
 - Press the **Show Password** button to generate the password for that credentials.
  
 ![Password Creation](https://m.primal.net/OzRg.png)
+
+### **How Passwords Are Created**
+Passwords are deterministically derived from four inputs:
+
+1. **Private Key** generated from your BIP39 seed phrase.
+2. Your **Username or Email**.
+3. The **Website URL**.
+4. A numeric **Nonce** used when you need a different password for the same site.
+
+These values are joined with slashes and hashed using `SHA-256`. The first 16
+hex characters of the hash are wrapped with `PASS` and `249+`:
+
+```
+PASS + SHA256(privateKey + '/' + username + '/' + site + '/' + nonce).substring(0,16) + '249+'
+```
+
+Using the same inputs always recreates the same password. Increase the nonce to
+obtain a new password without changing your master key.
    
 ### **Encrypt Local Data (Optional)**  
 You can choose to encrypt and save locally the private key and the nonces/sites data to speed up future access.
