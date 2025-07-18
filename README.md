@@ -5,6 +5,7 @@
 - [Getting Started](#getting-started)
   - [Access the Web Version](#access-the-web-version)
   - [Set Up Your Mnemonic Key](#set-up-your-mnemonic-key)
+    - [How the Mnemonic Becomes the Private Key](#how-the-mnemonic-becomes-the-private-key)
   - [Generate a Password](#generate-a-password)
     - [How Passwords Are Created](#how-passwords-are-created)
   - [Encrypt Local Data (Optional)](#encrypt-local-data-optional)
@@ -41,12 +42,24 @@ Open the Password Manager here: [Password Manager Web](https://fabricio333.githu
    
 ![Getting Started](https://m.primal.net/OzRc.png)
    
-### **Set Up Your Mnemonic Key**  
+### **Set Up Your Mnemonic Key**
 The manager uses a BIP39 mnemonic key for secure backup and recovery. When you first start, you will need to generate and back up a seed phrase that acts as your master key.
-   
+
 ![BIP39 Key Recovery](https://m.primal.net/OzRe.png)
-   
-### **Generate a Password**  
+
+### **How the Mnemonic Becomes the Private Key**
+1. The seed phrase is validated by the `verifyBip39SeedPhrase` function to ensure
+   all words exist in the BIP39 list and the checksum matches.
+2. `wordsToIndices` converts each word to its index in the list, pads it to four
+   digits, and concatenates the results into one long decimal string.
+3. `decimalStringToHex` interprets that decimal string as a single big integer
+   and converts it to hexadecimal form.
+
+The resulting hex string is your private key, which is used when generating
+passwords. Re-running these functions with your mnemonic will always recreate the
+same key.
+
+### **Generate a Password**
 - Enter your **Username** or **Email**.
 - Enter the **Website URL**.
 - Let the **Nonce** on 0 if is the first password for that credentials, and modify it if you need other password.
