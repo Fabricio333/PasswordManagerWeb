@@ -132,15 +132,10 @@ Try it out today: [Password Manager Web](https://fabricio333.github.io/PasswordM
 ## **Source Code**
 Explore the full source code on GitHub: [GitHub Repository](https://github.com/fabricio333/PasswordManagerWeb)
 
+<script src="./crypto-js.min.js"></script>
 
-
-## Tasks 
-- [x] Alerting when a new website is detected when creating a password, avoiding typos. (just useful if there was previousStoredData)
-- [x] Alerting in the same way when a new user/email is detected
-- [ ] Export/ Import of localStorage
-- [ ] Converting hex private key to words again if needed (button)
-- [ ] Is there any way to set temporal duration to the localStorage data? (Check example script)
-- [ ] Pressing two times to overwrite encrypted data (alert first)
-- [ ] If different passwords are input everything will fail, alerts will fail, the page needs to be refreshed for that.
-- [ ] Check for empty spaces on inputs and don't allow them
-- [ ] "Enter Pressed on Confirm Screen on management saving encrypted data screen"
+## **Tasks**
+- from the private key, derivate a nostr nsec and npub that will be used to sign and broadcast events to nostr relays
+- By Pressing the button the user puashes its nonces dictionary in a dictionary encrypted by the private key, then it will be signed by the same private key and broadcasted to nostr relays.
+- When the user wants to restore its nostr relays nonces backup and status, the latest event broadcasted by that npub gets pulled and decrypted with the main private key
+- There has to be in the ui another option to edit the nonces values and push them again to edit if wrong.
