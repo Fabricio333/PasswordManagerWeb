@@ -215,16 +215,23 @@ function broadcastToNostrRelay(nsec, npub, message) {
     const key = 'nostrBackup_' + npub;
     const historyKey = 'nostrBackupHistory_' + npub;
     const eventId = CryptoJS.SHA256(message).toString();
+
+    console.log('Broadcasting backup to relay', { key, eventId, message });
+
     localStorage.setItem(key, message);
+
     let history = [];
     try {
         history = JSON.parse(localStorage.getItem(historyKey)) || [];
     } catch (e) {
         history = [];
     }
+
     history.push({ eventId, message, timestamp: Date.now() });
     localStorage.setItem(historyKey, JSON.stringify(history));
-    console.log('Broadcasted to relay:', key, 'id:', eventId);
+
+    console.log('Backup stored. Total backups:', history.length);
+
     return eventId;
 }
 
@@ -275,12 +282,21 @@ async function restoreFromNostr() {
     if (!privateKey) { alert('No private key'); return; }
     const { npub } = deriveNostrKeys(privateKey);
     nostrKeys.npub = npub;
-    const result = fetchAndDecryptFromNostr(npub, privateKey);
-    if (!result) { alert('No backup data found.'); return; }
+
+    const history = getNostrBackupHistory(npub);
+    if (!history.length) { alert('No backup data found.'); return; }
+
+    const latest = history.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
+    console.log('Latest backup event', latest);
+
+    const decrypted = decryptNostrMessage(latest.message, privateKey);
+    if (!decrypted) { alert('Failed to decrypt backup.'); return; }
+
     try {
-        const parsed = JSON.parse(result.data);
+        const parsed = JSON.parse(decrypted);
         localStoredData['users'] = parsed;
-        alert('Backup restored successfully. Event ID: ' + result.eventId);
+        console.log('Restored data from event', latest.eventId);
+        alert('Backup restored successfully. Event ID: ' + latest.eventId);
     } catch (e) {
         console.error('Failed to parse restored data:', e);
         alert('Backup data invalid or corrupt.');
@@ -685,6 +701,7 @@ function openNostrHistory() {
     if (!privateKey) { alert('No private key'); return; }
     const { npub } = deriveNostrKeys(privateKey);
     const history = getNostrBackupHistory(npub);
+    console.log('Loaded backup history', history);
     const list = document.getElementById('nostrHistoryList');
     list.innerHTML = '';
     if (!history.length) {
@@ -715,6 +732,7 @@ function restoreFromNostrEvent(eventId) {
     try {
         const parsed = JSON.parse(decrypted);
         localStoredData['users'] = parsed;
+        console.log('Restored data from event', eventId);
         alert('Backup restored from event ' + eventId);
     } catch (e) {
         alert('Backup data invalid or corrupt.');
@@ -728,6 +746,7 @@ function downloadNostrEvent(eventId) {
     const history = getNostrBackupHistory(npub);
     const record = history.find(r => r.eventId === eventId);
     if (!record) { alert('Backup not found.'); return; }
+    console.log('Downloading event', eventId);
     const blob = new Blob([record.message], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
