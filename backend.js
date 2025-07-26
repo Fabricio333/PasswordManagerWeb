@@ -4,7 +4,6 @@ var userOrMailField = document.getElementById("userOrMailField");
 var siteField = document.getElementById("siteField");
 var passwordField = document.getElementById("passwordField");
 var nonceField = document.getElementById("nonceField");
-var seedPhraseField = document.getElementById("seedPhraseField");
 var newSeedPhraseField = document.getElementById("newSeedPhraseField");
 var localStoredData = {}
 var localStoredStatus = ""
@@ -188,7 +187,8 @@ function hash(text) {
 
 // --- Nostr Related Functions ---
 function deriveNostrKeys(privateKey) {
-    var ellipticLib = window.elliptic || elliptic;
+    var ellipticLib = (typeof window !== 'undefined' && window.elliptic) ||
+                      (typeof elliptic !== 'undefined' && elliptic);
     if (!ellipticLib) {
         throw new Error('elliptic library not loaded');
     }
@@ -649,6 +649,7 @@ function saveEditedNonces() {
         const data = JSON.parse(document.getElementById('noncesEditor').value);
         localStoredData['users'] = data;
         alert('Nonces updated.');
+        backupToNostr();
     } catch (e) {
         alert('Invalid JSON format.');
     }
