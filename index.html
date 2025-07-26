@@ -379,6 +379,9 @@
     <button class="option-btn" onclick="restoreFromNostr()">
         Restore Backup from Nostr
     </button>
+    <button class="option-btn" onclick="openNostrHistory()">
+        Nostr Backup History
+    </button>
     <button class="option-btn" onclick="openEditNonces()">
         Edit Nonces
     </button>
@@ -424,6 +427,18 @@
     <textarea class="input-field" id="noncesEditor" rows="10"></textarea>
     <button class="option-btn" onclick="saveEditedNonces()">Save Nonces</button>
     <button class="back-btn" onclick="navigateBack('editNoncesScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
+</div>
+
+<!-- Nostr History Screen -->
+<div class="screen hidden" id="nostrHistoryScreen">
+    <h2 class="title">Nostr Backup History</h2>
+    <div id="nostrHistoryList"></div>
+    <button class="back-btn" onclick="navigateBack('nostrHistoryScreen')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
