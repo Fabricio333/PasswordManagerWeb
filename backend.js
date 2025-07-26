@@ -221,72 +221,21 @@ const NOSTR_RELAYS = [
     'wss://relay.nostr.band'
 ];
 
-// Map of WebSocket connections
-let relayConnections = new Map();
-let isConnecting = false;
+// Nostr-tools SimplePool instance
+let nostrPool = null;
 
-// Establish connections to all relays
+// Initialize pool (only once)
 async function connectToRelays() {
-    if (isConnecting) return;
-    isConnecting = true;
-
-    const connectPromises = NOSTR_RELAYS.map(url => {
-        return new Promise((resolve, reject) => {
-            const ws = new WebSocket(url);
-            const timeout = setTimeout(() => {
-                ws.close();
-                reject(new Error('Connection timeout: ' + url));
-            }, 5000);
-            ws.onopen = () => {
-                clearTimeout(timeout);
-                relayConnections.set(url, ws);
-                resolve();
-            };
-            ws.onerror = err => {
-                clearTimeout(timeout);
-                reject(err);
-            };
-            ws.onclose = () => {
-                relayConnections.delete(url);
-            };
-        });
-    });
-
-    await Promise.allSettled(connectPromises);
-    isConnecting = false;
-}
-
-function hexToBytes(hex) {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
-    }
-    return bytes;
-}
-
-function bytesToHex(bytes) {
-    return Array.from(bytes)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-}
-
-function getEventHash(event) {
-    const ev = [0, event.pubkey, event.created_at, event.kind, event.tags, event.content];
-    const evStr = JSON.stringify(ev);
-    return CryptoJS.SHA256(CryptoJS.enc.Utf8.parse(evStr)).toString(CryptoJS.enc.Hex);
-}
-
-function signEvent(event, privBytes) {
-    const ec = new elliptic.ec('secp256k1');
-    const key = ec.keyFromPrivate(privBytes);
-    const sig = key.sign(event.id);
-    return new Uint8Array(sig.r.toArray('be', 32).concat(sig.s.toArray('be', 32)));
+    if (nostrPool) return;
+    const { SimplePool } = window.NostrTools;
+    nostrPool = new SimplePool();
+    console.log('Initialized Nostr pool with relays', NOSTR_RELAYS);
 }
 
 async function broadcastToNostrRelay(nsec, npub, content) {
     await connectToRelays();
 
-    const privBytes = hexToBytes(nsec);
+    const { getEventHash, signEvent } = window.NostrTools;
     const event = {
         kind: 30078,
         created_at: Math.floor(Date.now() / 1000),
@@ -296,17 +245,9 @@ async function broadcastToNostrRelay(nsec, npub, content) {
     };
 
     event.id = getEventHash(event);
-    event.sig = bytesToHex(signEvent(event, privBytes));
+    event.sig = signEvent(event, nsec);
 
-    const publishPromises = Array.from(relayConnections.values()).map(ws => {
-        return new Promise(resolve => {
-            if (ws.readyState !== WebSocket.OPEN) return resolve();
-            ws.send(JSON.stringify(['EVENT', event]));
-            resolve();
-        });
-    });
-
-    await Promise.allSettled(publishPromises);
+    nostrPool.publish(NOSTR_RELAYS, event);
     console.log('Published event', event.id);
     return event.id;
 }
@@ -314,34 +255,7 @@ async function broadcastToNostrRelay(nsec, npub, content) {
 async function queryEvents(filter) {
     await connectToRelays();
 
-    const subId = 'sub_' + Math.random().toString(36).slice(2);
-    const events = [];
-
-    const queryPromises = Array.from(relayConnections.values()).map(ws => {
-        return new Promise(resolve => {
-            if (ws.readyState !== WebSocket.OPEN) return resolve();
-            const handle = msg => {
-                try {
-                    const data = JSON.parse(msg.data);
-                    if (data[0] === 'EVENT' && data[1] === subId) {
-                        events.push(data[2]);
-                    } else if (data[0] === 'EOSE' && data[1] === subId) {
-                        ws.removeEventListener('message', handle);
-                        resolve();
-                    }
-                } catch { }
-            };
-            ws.addEventListener('message', handle);
-            ws.send(JSON.stringify(['REQ', subId, filter]));
-            setTimeout(() => {
-                ws.removeEventListener('message', handle);
-                ws.send(JSON.stringify(['CLOSE', subId]));
-                resolve();
-            }, 10000);
-        });
-    });
-
-    await Promise.allSettled(queryPromises);
+    const events = await nostrPool.list(NOSTR_RELAYS, [filter]);
     events.sort((a, b) => b.created_at - a.created_at);
     return events;
 }
