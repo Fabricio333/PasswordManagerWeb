@@ -1,3 +1,4 @@
+// MAIN.JS
 var seedPhraseField = document.getElementById("seedPhraseField");
 var privateKeyField = document.getElementById("privateKeyField");
 var userOrMailField = document.getElementById("userOrMailField");
@@ -13,7 +14,6 @@ var nostrKeys = { nsec: "", npub: "" };
 const navigationHistory = ["welcomeScreen"];
 let currentScreenId = "welcomeScreen";
 
-// Fixed showScreen function to track navigation history correctly
 function showScreen(screenId, isBackNavigation = false) {
     // Hide all screens
     document.querySelectorAll('.screen').forEach(screen => {
@@ -47,7 +47,6 @@ function showScreen(screenId, isBackNavigation = false) {
     console.log("Navigation History:", navigationHistory);
 }
 
-// Improved function to navigate back
 function navigateBack(currentScreen) {
     // Don't proceed if we're already at the welcome screen or history is empty
     if (navigationHistory.length <= 1) {
@@ -73,6 +72,7 @@ function decimalStringToHex(DecimalString) {
     const hexadecimal = decimalNumber.toString(16); // Convert to hexadecimal
     return hexadecimal;
 }
+
 function wordsToIndices(inputWords) {
     // Ensure inputWords is a string
     if (typeof inputWords !== "string") {
@@ -95,6 +95,7 @@ function wordsToIndices(inputWords) {
         return index.toString().padStart(4, '0');
     }).join('');
 }
+
 async function verifyBip39SeedPhrase(seedPhrase, wordlist) {
     /**
      * Verifies a BIP-39 seed phrase.
@@ -166,168 +167,44 @@ async function verifyBip39SeedPhrase(seedPhrase, wordlist) {
 }
 async function verifySeedAndMoveNext() {
     try {
-        // Await the result of the async function
-        var isValid = await verifyBip39SeedPhrase(seedPhraseField.value, words);
-        if (isValid) {
-            privateKeyField.value = decimalStringToHex(wordsToIndices(seedPhraseField.value));
-            nostrKeys = deriveNostrKeys(privateKeyField.value);
-            showScreen('managementScreen'); // Move to the next screen
-        } else {
+        const { nip19, getPublicKey } = window.NostrTools;
+
+        const isValid = await verifyBip39SeedPhrase(seedPhraseField.value, words);
+        if (!isValid) {
             alert("Seed phrase is not valid");
+            return;
         }
+
+        // 1. Convert seed phrase to a long decimal string then hex
+        const longHex = decimalStringToHex(wordsToIndices(seedPhraseField.value));
+        privateKeyField.value = longHex;
+
+        // 2. Hash the hex string to derive nostr private key
+        const utf8 = new TextEncoder().encode(longHex);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+        const nostrHex = Array.from(new Uint8Array(hashBuffer))
+            .map(b => b.toString(16).padStart(2, '0')).join('');
+
+        // 3. Encode keys using Nostr tools
+        const nsec = nip19.nsecEncode(nostrHex);
+        const npub = getPublicKey(nostrHex);
+
+        // 4. Save for global use
+        nostrKeys = { nsec, npub };
+
+        // 5. Continue
+        showScreen('managementScreen');
+
     } catch (error) {
         console.error("Error verifying seed phrase:", error);
         alert("An error occurred while verifying the seed phrase");
     }
 }
+
+
 function hash(text) {
     return CryptoJS.SHA256(text).toString();
 
-}
-
-// --- Nostr Related Functions ---
-const {
-    nip19,
-    relayInit,
-    getPublicKey,
-    getEventHash,
-    signEvent
-} = window.NostrTools;
-
-function deriveNostrKeys(privateKeyHex) {
-    const npub = getPublicKey(privateKeyHex);
-    const nsec = nip19.nsecEncode(privateKeyHex);
-    return { nsec, npub };
-}
-
-function encryptAndSignNonces(dictionary, privateKeyHex) {
-    const encryptedDictionary = CryptoJS.AES.encrypt(JSON.stringify(dictionary), privateKeyHex).toString();
-    const signature = CryptoJS.SHA256(encryptedDictionary + privateKeyHex).toString();
-    return { encryptedDictionary, signature };
-}
-
-const NOSTR_RELAYS = [
-    'wss://relay.damus.io',
-    'wss://nos.lol',
-    'wss://relay.snort.social',
-    'wss://relay.nostr.band'
-];
-
-function signNostrEvent(event, privateKeyHex) {
-    event.id = getEventHash(event);
-    event.sig = signEvent(event, privateKeyHex);
-    return event;
-}
-
-async function broadcastToNostrRelay(privateKeyHex, pubKeyHex, content) {
-    const event = {
-        kind: 30078,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [['d', 'password-manager-backup'], ['client', 'nostr-password-manager']],
-        content,
-        pubkey: pubKeyHex
-    };
-    signNostrEvent(event, privateKeyHex);
-    for (const url of NOSTR_RELAYS) {
-        try {
-            const relay = relayInit(url);
-            await relay.connect();
-            relay.publish(event);
-            relay.close();
-        } catch (e) {
-            console.warn('Relay error', url, e);
-        }
-    }
-    console.log('Published event:', event.id);
-    return event.id;
-}
-
-async function queryEvents(filter) {
-    const all = new Map();
-    for (const url of NOSTR_RELAYS) {
-        try {
-            const relay = relayInit(url);
-            await relay.connect();
-            const sub = relay.sub([filter]);
-            await new Promise(resolve => {
-                sub.on('event', ev => all.set(ev.id, ev));
-                sub.on('eose', () => { sub.unsub(); relay.close(); resolve(); });
-                setTimeout(() => { sub.unsub(); relay.close(); resolve(); }, 15000);
-            });
-        } catch (e) {
-            console.warn('Relay query failed', url, e);
-        }
-    }
-    return Array.from(all.values()).sort((a,b)=>b.created_at-a.created_at);
-}
-
-function decryptNostrContent(event, privateKey) {
-    try {
-        const bytes = CryptoJS.AES.decrypt(event.content, privateKey);
-        return bytes.toString(CryptoJS.enc.Utf8);
-    } catch (e) {
-        console.error('Failed to decrypt Nostr data:', e);
-        return null;
-    }
-}
-
-async function getNostrBackupHistory(npub) {
-    try {
-        const filter = {
-            kinds: [30078],
-            authors: [npub],
-            '#d': ['password-manager-backup'],
-            limit: 50
-        };
-        const events = await queryEvents(filter);
-        return events.map(ev => ({
-            eventId: ev.id,
-            timestamp: ev.created_at * 1000,
-            event: ev
-        }));
-    } catch (error) {
-        console.error('Failed to get backup history:', error);
-        return [];
-    }
-}
-
-async function backupToNostr() {
-    const privateKey = privateKeyField.value;
-    if (!privateKey) { alert('No private key'); return; }
-    const { nsec, npub } = deriveNostrKeys(privateKey);
-    nostrKeys = { nsec, npub };
-    if (!localStoredData["users"]) localStoredData["users"] = {};
-    const userData = localStoredData["users"];
-    const { encryptedDictionary, signature } = encryptAndSignNonces(userData, privateKey);
-    const message = JSON.stringify({ encryptedDictionary, signature, timestamp: Date.now() });
-    const eventId = await broadcastToNostrRelay(nsec, npub, message);
-    alert('Backup broadcasted to Nostr relays. Event ID: ' + eventId);
-}
-
-async function restoreFromNostr() {
-    const privateKey = privateKeyField.value;
-    if (!privateKey) { alert('No private key'); return; }
-    const { npub } = deriveNostrKeys(privateKey);
-    nostrKeys.npub = npub;
-
-    const history = await getNostrBackupHistory(npub);
-    if (!history.length) { alert('No backup data found on relays.'); return; }
-
-    const latest = history[0];
-    console.log('Latest backup event', latest.eventId);
-
-    const decrypted = decryptNostrContent(latest.event, privateKey);
-    if (!decrypted) { alert('Failed to decrypt backup.'); return; }
-
-    try {
-        const parsed = JSON.parse(decrypted);
-        localStoredData['users'] = parsed;
-        console.log('Restored data from event', latest.eventId);
-        alert('Backup restored successfully. Event ID: ' + latest.eventId);
-    } catch (e) {
-        console.error('Failed to parse restored data:', e);
-        alert('Backup data invalid or corrupt.');
-    }
 }
 
 async function showPassword() {
@@ -478,28 +355,6 @@ function decrementSiteNonce() {
     }
 }
 
-
-document.getElementById("siteField").addEventListener("input", updateNonceFromLocalStorage);
-// Keydown event listener to handle Enter key
-document.addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        switch (currentScreenId) {
-            case "recoverScreen":
-                verifySeedAndMoveNext();
-                break;
-            case "verifySeedBackUpScreen":
-                verifySeedPhrase();
-                break;
-            // Add more cases for additional screens
-            default:
-                console.log("Enter pressed on screen:", currentScreenId);
-                break;
-        }
-    }
-});
-
-// Function to get random unique indices
 function getRandomIndices(max, count) {
     const indices = new Set();
     while (indices.size < count) {
@@ -508,7 +363,6 @@ function getRandomIndices(max, count) {
     return Array.from(indices);
 }
 
-// Function to set up the verification screen
 function setupVerificationScreen() {
     const wordPrompts = document.getElementById("wordPrompts");
     wordPrompts.innerHTML = "";
@@ -531,7 +385,6 @@ function setupVerificationScreen() {
     });
 }
 
-// Function to verify the seed phrase
 function verifySeedPhrase() {
     const newSeedPhraseField = document.getElementById("newSeedPhraseField");
     const words = newSeedPhraseField.value.trim().split(/\s+/);
@@ -572,7 +425,6 @@ function verifySeedPhrase() {
     }
 }
 
-// Function called after successful verification
 function moveToManagementScreen() {
     // Clear sensitive seed phrase data from the DOM
     document.getElementById("newSeedPhraseField").value = "";
@@ -722,62 +574,378 @@ function saveEditedNonces() {
     }
 }
 
-// ------ Nostr History Utilities ------
-async function openNostrHistory() {
-    const privateKey = privateKeyField.value;
-    if (!privateKey) { alert('No private key'); return; }
-    const { npub } = deriveNostrKeys(privateKey);
-    const history = await getNostrBackupHistory(npub);
-    console.log('Loaded backup history from relays:', history);
-    const list = document.getElementById('nostrHistoryList');
-    list.innerHTML = '';
-    if (!history.length) {
-        list.textContent = 'No backups found on relays.';
-    } else {
-        history.forEach(record => {
-            const container = document.createElement('div');
-            container.style.marginBottom = '1rem';
-            container.innerHTML =
-                `<div>Event ID: ${record.eventId}<br>${new Date(record.timestamp).toLocaleString()}</div>` +
-                `<button class="option-btn" onclick="restoreFromNostrEvent('${record.eventId}')">Restore</button>` +
-                `<button class="option-btn" onclick="downloadNostrEvent('${record.eventId}')">Download</button>`;
-            list.appendChild(container);
-        });
-    }
-    showScreen('nostrHistoryScreen');
-}
+window.backupToNostr = async function () {
+    const { nip04, relayInit, getEventHash, signEvent, getPublicKey } = window.NostrTools;
 
-async function restoreFromNostrEvent(eventId) {
-    const privateKey = privateKeyField.value;
-    if (!privateKey) { alert('No private key'); return; }
-    const { npub } = deriveNostrKeys(privateKey);
-    const history = await getNostrBackupHistory(npub);
-    const record = history.find(r => r.eventId === eventId);
-    if (!record) { alert('Backup not found.'); return; }
-    const decrypted = decryptNostrContent(record.event, privateKey);
-    if (!decrypted) { alert('Failed to decrypt backup.'); return; }
+    console.log("📦 Starting NOSTR backup...");
+
+    const entropy = privateKeyField.value.trim();
+    if (!entropy) return alert("Missing private key");
+    if (!localStoredData || Object.keys(localStoredData).length === 0) return alert("No data to backup");
+
+    // Initialize relayList if not exists
+    if (!window.relayList || !Array.isArray(window.relayList) || window.relayList.length === 0) {
+        window.relayList = [
+            "wss://relay.damus.io",
+            "wss://nostr-pub.wellorder.net",
+            "wss://relay.snort.social",
+            "wss://nos.lol"
+        ];
+        console.log("🔧 Initialized default relay list");
+    }
+
     try {
-        const parsed = JSON.parse(decrypted);
-        localStoredData['users'] = parsed;
-        console.log('Restored data from event', eventId);
-        alert('Backup restored from event ' + eventId);
-    } catch (e) {
-        alert('Backup data invalid or corrupt.');
-    }
-}
+        const utf8 = new TextEncoder().encode(entropy);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+        const sk = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const pk = getPublicKey(sk);
 
-async function downloadNostrEvent(eventId) {
-    const privateKey = privateKeyField.value;
-    if (!privateKey) { alert('No private key'); return; }
-    const { npub } = deriveNostrKeys(privateKey);
-    const history = await getNostrBackupHistory(npub);
-    const record = history.find(r => r.eventId === eventId);
-    if (!record) { alert('Backup not found.'); return; }
-    console.log('Downloading event:', eventId);
-    const blob = new Blob([JSON.stringify(record.event, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `nostr-backup-${eventId.substring(0,8)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-}
+        const data = JSON.stringify(localStoredData);
+        const encrypted = await nip04.encrypt(sk, pk, data);
+        console.log("🔐 Data encrypted successfully");
+
+        const event = {
+            kind: 1,
+            pubkey: pk,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [["t", "nostr-pwd-backup"]],
+            content: encrypted,
+        };
+
+        event.id = getEventHash(event);
+        event.sig = await signEvent(event, sk);
+        console.log("📤 Event prepared for publishing");
+
+        let successCount = 0;
+        const totalRelays = window.relayList.length;
+
+        const publishPromises = window.relayList.map(async (url) => {
+            try {
+                console.log(`🌐 Connecting to ${url}`);
+                const relay = relayInit(url);
+
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+
+                    relay.on('connect', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+
+                    relay.on('error', (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    });
+
+                    relay.connect();
+                });
+
+                // Try the newer publish method first, then fallback to older method
+                let publishResult;
+                try {
+                    publishResult = relay.publish(event);
+
+                    // Check if it has .on methods (newer version)
+                    if (publishResult && typeof publishResult.on === 'function') {
+                        await new Promise((resolve, reject) => {
+                            const timeout = setTimeout(() => reject(new Error('Publish timeout')), 3000);
+
+                            publishResult.on("ok", () => {
+                                clearTimeout(timeout);
+                                console.log(`✅ Successfully published to ${url}`);
+                                successCount++;
+                                resolve();
+                            });
+
+                            publishResult.on("failed", (reason) => {
+                                clearTimeout(timeout);
+                                console.warn(`❌ Failed to publish to ${url}:`, reason);
+                                reject(new Error(reason));
+                            });
+                        });
+                    } else {
+                        // Older version - just assume success if no error thrown
+                        console.log(`✅ Published to ${url} (legacy mode)`);
+                        successCount++;
+                    }
+                } catch (publishError) {
+                    // Try alternative publish method for older versions
+                    try {
+                        await relay.send(['EVENT', event]);
+                        console.log(`✅ Published to ${url} (send method)`);
+                        successCount++;
+                    } catch (sendError) {
+                        throw new Error(`Both publish methods failed: ${publishError.message}, ${sendError.message}`);
+                    }
+                }
+
+                relay.close();
+            } catch (e) {
+                console.error(`🔥 Relay ${url} failed:`, e.message);
+            }
+        });
+
+        await Promise.allSettled(publishPromises);
+
+        if (successCount > 0) {
+            alert(`✅ Backup successful! Published to ${successCount}/${totalRelays} relays`);
+        } else {
+            alert("❌ Failed to publish to any relays");
+        }
+    } catch (error) {
+        console.error("🔥 Backup failed:", error);
+        alert("❌ Backup failed: " + error.message);
+    }
+};
+
+window.restoreFromNostr = async function () {
+    const { nip04, relayInit, getPublicKey } = window.NostrTools;
+
+    if (window.restoreInProgress) return alert("Restore already in progress");
+    window.restoreInProgress = true;
+
+    console.log("🔄 Starting restore from NOSTR...");
+
+    const entropy = privateKeyField.value.trim();
+    if (!entropy) {
+        alert("Missing private key");
+        window.restoreInProgress = false;
+        return;
+    }
+
+    // Initialize relayList if not exists
+    if (!window.relayList || !Array.isArray(window.relayList) || window.relayList.length === 0) {
+        window.relayList = [
+            "wss://relay.damus.io",
+            "wss://nostr-pub.wellorder.net",
+            "wss://relay.snort.social",
+            "wss://nos.lol"
+        ];
+        console.log("🔧 Initialized default relay list");
+    }
+
+    try {
+        const utf8 = new TextEncoder().encode(entropy);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+        const sk = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const pk = getPublicKey(sk);
+        console.log("🔑 Using pubkey:", pk);
+
+        let found = false;
+        let latestEvent = null;
+
+        const searchPromises = window.relayList.map(async (url) => {
+            try {
+                console.log(`🌐 Connecting to ${url}`);
+                const relay = relayInit(url);
+
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+
+                    relay.on('connect', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+
+                    relay.on('error', (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    });
+
+                    relay.connect();
+                });
+
+                const filter = { kinds: [1], authors: [pk], "#t": ["nostr-pwd-backup"] };
+                console.log(`🛰️ Subscribing with filter:`, filter);
+
+                const sub = relay.sub([filter]);
+
+                await new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        sub.unsub();
+                        resolve();
+                    }, 10000);
+
+                    sub.on("event", async (e) => {
+                        console.log("📨 Got event:", e.id);
+
+                        // Keep track of the latest event
+                        if (!latestEvent || e.created_at > latestEvent.created_at) {
+                            latestEvent = e;
+                            found = true;
+                        }
+                    });
+
+                    sub.on("eose", () => {
+                        clearTimeout(timeout);
+                        sub.unsub();
+                        resolve();
+                    });
+                });
+
+                relay.close();
+            } catch (err) {
+                console.error(`🔥 Error on relay ${url}:`, err.message);
+            }
+        });
+
+        await Promise.allSettled(searchPromises);
+
+        if (found && latestEvent) {
+            try {
+                const decrypted = await nip04.decrypt(sk, latestEvent.pubkey, latestEvent.content);
+                console.log("🔓 Successfully decrypted data");
+
+                const parsedData = JSON.parse(decrypted);
+                localStoredData = parsedData;
+                localStoredStatus = "loaded";
+
+                alert("✅ Restore complete from NOSTR");
+                showScreen("managementScreen");
+            } catch (err) {
+                console.error("❌ Failed to decrypt/parse:", err);
+                alert("⚠️ Could not decrypt or parse restored data");
+            }
+        } else {
+            alert("⚠️ No backup found on any relay");
+        }
+    } catch (error) {
+        console.error("🔥 Restore failed:", error);
+        alert("❌ Restore failed: " + error.message);
+    } finally {
+        window.restoreInProgress = false;
+    }
+};
+
+window.openNostrHistory = async function () {
+    const { relayInit, getPublicKey } = window.NostrTools;
+
+    console.log("📖 Fetching backup history...");
+
+    const entropy = privateKeyField.value.trim();
+    if (!entropy) return alert("Missing private key");
+
+    // Initialize relayList if not exists
+    if (!window.relayList || !Array.isArray(window.relayList) || window.relayList.length === 0) {
+        window.relayList = [
+            "wss://relay.damus.io",
+            "wss://nostr-pub.wellorder.net",
+            "wss://relay.snort.social",
+            "wss://nos.lol"
+        ];
+        console.log("🔧 Initialized default relay list");
+    }
+
+    try {
+        const utf8 = new TextEncoder().encode(entropy);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+        const sk = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const pk = getPublicKey(sk);
+
+        const container = document.getElementById("nostrHistoryList");
+        if (!container) {
+            alert("History display element not found");
+            return;
+        }
+
+        container.innerHTML = "<p>⏳ Fetching backup history from relays…</p>";
+
+        let allResults = [];
+
+        const historyPromises = window.relayList.map(async (url) => {
+            try {
+                console.log(`🌐 Connecting to ${url}`);
+                const relay = relayInit(url);
+
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+
+                    relay.on('connect', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+
+                    relay.on('error', (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    });
+
+                    relay.connect();
+                });
+
+                const sub = relay.sub([{ kinds: [1], authors: [pk], "#t": ["nostr-pwd-backup"] }]);
+
+                await new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        sub.unsub();
+                        resolve();
+                    }, 8000);
+
+                    sub.on("event", (e) => {
+                        const date = new Date(e.created_at * 1000).toLocaleString();
+                        console.log(`🕓 Backup from ${url} on ${date}`);
+                        allResults.push({
+                            date: date,
+                            timestamp: e.created_at,
+                            relay: url,
+                            id: e.id
+                        });
+                    });
+
+                    sub.on("eose", () => {
+                        clearTimeout(timeout);
+                        sub.unsub();
+                        resolve();
+                    });
+                });
+
+                relay.close();
+            } catch (err) {
+                console.error(`🔥 History fetch failed for ${url}:`, err.message);
+            }
+        });
+
+        await Promise.allSettled(historyPromises);
+
+        // Sort results by timestamp (newest first) and remove duplicates
+        const uniqueResults = [];
+        const seenIds = new Set();
+
+        allResults
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .forEach(result => {
+                if (!seenIds.has(result.id)) {
+                    seenIds.add(result.id);
+                    uniqueResults.push(result);
+                }
+            });
+
+        if (uniqueResults.length > 0) {
+            container.innerHTML = `<h3>Found ${uniqueResults.length} backup(s):</h3>`;
+            uniqueResults.forEach(result => {
+                const el = document.createElement("div");
+                el.style.padding = "10px";
+                el.style.margin = "5px 0";
+                el.style.border = "1px solid #ccc";
+                el.style.borderRadius = "5px";
+                el.innerHTML = `
+                    <strong>📦 ${result.date}</strong><br>
+                    <small>Relay: ${result.relay}</small><br>
+                    <small>ID: ${result.id.substring(0, 16)}...</small>
+                `;
+                container.appendChild(el);
+            });
+        } else {
+            container.innerHTML = "<p>⚠️ No backup history found on any relay.</p>";
+        }
+
+        showScreen("nostrHistoryScreen");
+    } catch (error) {
+        console.error("🔥 History fetch failed:", error);
+        const container = document.getElementById("nostrHistoryList");
+        if (container) {
+            container.innerHTML = `<p>⚠️ Failed to fetch history: ${error.message}</p>`;
+        }
+        alert("❌ Failed to fetch history: " + error.message);
+    }
+};
