@@ -211,55 +211,168 @@ function encryptAndSignNonces(dictionary, privateKey) {
     return { encryptedDictionary, signature };
 }
 
-function broadcastToNostrRelay(nsec, npub, message) {
-    const key = 'nostrBackup_' + npub;
-    const historyKey = 'nostrBackupHistory_' + npub;
-    const eventId = CryptoJS.SHA256(message).toString();
+// ----- Real Nostr Relay Utilities -----
 
-    console.log('Broadcasting backup to relay', { key, eventId, message });
+// List of relays to connect to
+const NOSTR_RELAYS = [
+    'wss://relay.damus.io',
+    'wss://nos.lol',
+    'wss://relay.snort.social',
+    'wss://relay.nostr.band'
+];
 
-    localStorage.setItem(key, message);
+// Map of WebSocket connections
+let relayConnections = new Map();
+let isConnecting = false;
 
-    let history = [];
-    try {
-        history = JSON.parse(localStorage.getItem(historyKey)) || [];
-    } catch (e) {
-        history = [];
-    }
+// Establish connections to all relays
+async function connectToRelays() {
+    if (isConnecting) return;
+    isConnecting = true;
 
-    history.push({ eventId, message, timestamp: Date.now() });
-    localStorage.setItem(historyKey, JSON.stringify(history));
+    const connectPromises = NOSTR_RELAYS.map(url => {
+        return new Promise((resolve, reject) => {
+            const ws = new WebSocket(url);
+            const timeout = setTimeout(() => {
+                ws.close();
+                reject(new Error('Connection timeout: ' + url));
+            }, 5000);
+            ws.onopen = () => {
+                clearTimeout(timeout);
+                relayConnections.set(url, ws);
+                resolve();
+            };
+            ws.onerror = err => {
+                clearTimeout(timeout);
+                reject(err);
+            };
+            ws.onclose = () => {
+                relayConnections.delete(url);
+            };
+        });
+    });
 
-    console.log('Backup stored. Total backups:', history.length);
-
-    return eventId;
+    await Promise.allSettled(connectPromises);
+    isConnecting = false;
 }
 
-function decryptNostrMessage(message, privateKey) {
+function hexToBytes(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return bytes;
+}
+
+function bytesToHex(bytes) {
+    return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+function getEventHash(event) {
+    const ev = [0, event.pubkey, event.created_at, event.kind, event.tags, event.content];
+    const evStr = JSON.stringify(ev);
+    return CryptoJS.SHA256(CryptoJS.enc.Utf8.parse(evStr)).toString(CryptoJS.enc.Hex);
+}
+
+function signEvent(event, privBytes) {
+    const ec = new elliptic.ec('secp256k1');
+    const key = ec.keyFromPrivate(privBytes);
+    const sig = key.sign(event.id);
+    return new Uint8Array(sig.r.toArray('be', 32).concat(sig.s.toArray('be', 32)));
+}
+
+async function broadcastToNostrRelay(nsec, npub, content) {
+    await connectToRelays();
+
+    const privBytes = hexToBytes(nsec);
+    const event = {
+        kind: 30078,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['d', 'password-manager-backup']],
+        content,
+        pubkey: npub
+    };
+
+    event.id = getEventHash(event);
+    event.sig = bytesToHex(signEvent(event, privBytes));
+
+    const publishPromises = Array.from(relayConnections.values()).map(ws => {
+        return new Promise(resolve => {
+            if (ws.readyState !== WebSocket.OPEN) return resolve();
+            ws.send(JSON.stringify(['EVENT', event]));
+            resolve();
+        });
+    });
+
+    await Promise.allSettled(publishPromises);
+    console.log('Published event', event.id);
+    return event.id;
+}
+
+async function queryEvents(filter) {
+    await connectToRelays();
+
+    const subId = 'sub_' + Math.random().toString(36).slice(2);
+    const events = [];
+
+    const queryPromises = Array.from(relayConnections.values()).map(ws => {
+        return new Promise(resolve => {
+            if (ws.readyState !== WebSocket.OPEN) return resolve();
+            const handle = msg => {
+                try {
+                    const data = JSON.parse(msg.data);
+                    if (data[0] === 'EVENT' && data[1] === subId) {
+                        events.push(data[2]);
+                    } else if (data[0] === 'EOSE' && data[1] === subId) {
+                        ws.removeEventListener('message', handle);
+                        resolve();
+                    }
+                } catch { }
+            };
+            ws.addEventListener('message', handle);
+            ws.send(JSON.stringify(['REQ', subId, filter]));
+            setTimeout(() => {
+                ws.removeEventListener('message', handle);
+                ws.send(JSON.stringify(['CLOSE', subId]));
+                resolve();
+            }, 10000);
+        });
+    });
+
+    await Promise.allSettled(queryPromises);
+    events.sort((a, b) => b.created_at - a.created_at);
+    return events;
+}
+
+function decryptNostrContent(event, privateKey) {
     try {
-        const parsed = JSON.parse(message);
-        return CryptoJS.AES.decrypt(parsed.encryptedDictionary, privateKey).toString(CryptoJS.enc.Utf8);
+        const bytes = CryptoJS.AES.decrypt(event.content, privateKey);
+        return bytes.toString(CryptoJS.enc.Utf8);
     } catch (e) {
         console.error('Failed to decrypt Nostr data:', e);
         return null;
     }
 }
 
-function fetchAndDecryptFromNostr(npub, privateKey) {
-    const key = 'nostrBackup_' + npub;
-    const receivedMessage = localStorage.getItem(key);
-    if (!receivedMessage) return null;
-    const decryptedData = decryptNostrMessage(receivedMessage, privateKey);
-    if (decryptedData === null) return null;
-    const eventId = CryptoJS.SHA256(receivedMessage).toString();
-    return { data: decryptedData, eventId };
-}
-
-function getNostrBackupHistory(npub) {
-    const historyKey = 'nostrBackupHistory_' + npub;
+async function getNostrBackupHistory(npub) {
     try {
-        return JSON.parse(localStorage.getItem(historyKey)) || [];
-    } catch (e) {
+        await connectToRelays();
+        const filter = {
+            kinds: [30078],
+            authors: [npub],
+            '#d': ['password-manager-backup'],
+            limit: 50
+        };
+        const events = await queryEvents(filter);
+        return events.map(ev => ({
+            eventId: ev.id,
+            timestamp: ev.created_at * 1000,
+            event: ev
+        }));
+    } catch (error) {
+        console.error('Failed to get backup history:', error);
         return [];
     }
 }
@@ -273,7 +386,7 @@ async function backupToNostr() {
     const userData = localStoredData["users"];
     const { encryptedDictionary, signature } = encryptAndSignNonces(userData, privateKey);
     const message = JSON.stringify({ encryptedDictionary, signature, timestamp: Date.now() });
-    const eventId = broadcastToNostrRelay(nsec, npub, message);
+    const eventId = await broadcastToNostrRelay(nsec, npub, message);
     alert('Backup broadcasted to Nostr relays. Event ID: ' + eventId);
 }
 
@@ -283,13 +396,13 @@ async function restoreFromNostr() {
     const { npub } = deriveNostrKeys(privateKey);
     nostrKeys.npub = npub;
 
-    const history = getNostrBackupHistory(npub);
-    if (!history.length) { alert('No backup data found.'); return; }
+    const history = await getNostrBackupHistory(npub);
+    if (!history.length) { alert('No backup data found on relays.'); return; }
 
-    const latest = history.reduce((a, b) => a.timestamp > b.timestamp ? a : b);
-    console.log('Latest backup event', latest);
+    const latest = history[0];
+    console.log('Latest backup event', latest.eventId);
 
-    const decrypted = decryptNostrMessage(latest.message, privateKey);
+    const decrypted = decryptNostrContent(latest.event, privateKey);
     if (!decrypted) { alert('Failed to decrypt backup.'); return; }
 
     try {
@@ -696,18 +809,18 @@ function saveEditedNonces() {
 }
 
 // ------ Nostr History Utilities ------
-function openNostrHistory() {
+async function openNostrHistory() {
     const privateKey = privateKeyField.value;
     if (!privateKey) { alert('No private key'); return; }
     const { npub } = deriveNostrKeys(privateKey);
-    const history = getNostrBackupHistory(npub);
-    console.log('Loaded backup history', history);
+    const history = await getNostrBackupHistory(npub);
+    console.log('Loaded backup history from relays:', history);
     const list = document.getElementById('nostrHistoryList');
     list.innerHTML = '';
     if (!history.length) {
-        list.textContent = 'No backups found.';
+        list.textContent = 'No backups found on relays.';
     } else {
-        history.slice().reverse().forEach(record => {
+        history.forEach(record => {
             const container = document.createElement('div');
             container.style.marginBottom = '1rem';
             container.innerHTML =
@@ -720,14 +833,14 @@ function openNostrHistory() {
     showScreen('nostrHistoryScreen');
 }
 
-function restoreFromNostrEvent(eventId) {
+async function restoreFromNostrEvent(eventId) {
     const privateKey = privateKeyField.value;
     if (!privateKey) { alert('No private key'); return; }
     const { npub } = deriveNostrKeys(privateKey);
-    const history = getNostrBackupHistory(npub);
+    const history = await getNostrBackupHistory(npub);
     const record = history.find(r => r.eventId === eventId);
     if (!record) { alert('Backup not found.'); return; }
-    const decrypted = decryptNostrMessage(record.message, privateKey);
+    const decrypted = decryptNostrContent(record.event, privateKey);
     if (!decrypted) { alert('Failed to decrypt backup.'); return; }
     try {
         const parsed = JSON.parse(decrypted);
@@ -739,18 +852,18 @@ function restoreFromNostrEvent(eventId) {
     }
 }
 
-function downloadNostrEvent(eventId) {
+async function downloadNostrEvent(eventId) {
     const privateKey = privateKeyField.value;
     if (!privateKey) { alert('No private key'); return; }
     const { npub } = deriveNostrKeys(privateKey);
-    const history = getNostrBackupHistory(npub);
+    const history = await getNostrBackupHistory(npub);
     const record = history.find(r => r.eventId === eventId);
     if (!record) { alert('Backup not found.'); return; }
-    console.log('Downloading event', eventId);
-    const blob = new Blob([record.message], { type: 'application/json' });
+    console.log('Downloading event:', eventId);
+    const blob = new Blob([JSON.stringify(record.event, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = eventId + '.json';
+    a.download = `nostr-backup-${eventId.substring(0,8)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
 }
