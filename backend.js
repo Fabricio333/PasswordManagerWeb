@@ -188,7 +188,11 @@ function hash(text) {
 
 // --- Nostr Related Functions ---
 function deriveNostrKeys(privateKey) {
-    const ec = new elliptic.ec('secp256k1');
+    var ellipticLib = window.elliptic || elliptic;
+    if (!ellipticLib) {
+        throw new Error('elliptic library not loaded');
+    }
+    const ec = new ellipticLib.ec('secp256k1');
     const key = ec.keyFromPrivate(privateKey);
     const nsec = privateKey;
     const npub = key.getPublic(true, 'hex');
