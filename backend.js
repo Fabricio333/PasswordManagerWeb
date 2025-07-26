@@ -238,7 +238,8 @@ async function backupToNostr() {
     if (!privateKey) { alert('No private key'); return; }
     const { nsec, npub } = deriveNostrKeys(privateKey);
     nostrKeys = { nsec, npub };
-    const userData = (localStoredData["users"] && localStoredData["users"][userOrMailField.value]) || {};
+    if (!localStoredData["users"]) localStoredData["users"] = {};
+    const userData = localStoredData["users"];
     const { encryptedDictionary, signature } = encryptAndSignNonces(userData, privateKey);
     const message = JSON.stringify({ encryptedDictionary, signature, timestamp: Date.now() });
     const eventId = broadcastToNostrRelay(nsec, npub, message);
@@ -254,8 +255,7 @@ async function restoreFromNostr() {
     if (!data) { alert('No backup data found.'); return; }
     try {
         const parsed = JSON.parse(data);
-        if (!localStoredData['users']) localStoredData['users'] = {};
-        localStoredData['users'][userOrMailField.value] = parsed;
+        localStoredData['users'] = parsed;
         alert('Backup restored successfully.');
     } catch (e) {
         console.error('Failed to parse restored data:', e);
