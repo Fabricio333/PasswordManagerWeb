@@ -437,7 +437,7 @@ function incrementSiteNonce() {
 
 function decrementSiteNonce() {
     const userOrMail = document.getElementById("userOrMailField").value;
-    const site = document.getElementById("siteField");
+    const site = document.getElementById("siteField").value;
     const nonceField = document.getElementById("nonceField");
     if (!userOrMail || !site) {
         alert("there is no site or user value")
