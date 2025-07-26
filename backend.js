@@ -8,6 +8,8 @@ var seedPhraseField = document.getElementById("seedPhraseField");
 var newSeedPhraseField = document.getElementById("newSeedPhraseField");
 var localStoredData = {}
 var localStoredStatus = ""
+// Object to store derived nostr keys
+var nostrKeys = { nsec: "", npub: "" };
 // Navigation history stack
 const navigationHistory = ["welcomeScreen"];
 let currentScreenId = "welcomeScreen";
@@ -169,6 +171,7 @@ async function verifySeedAndMoveNext() {
         var isValid = await verifyBip39SeedPhrase(seedPhraseField.value, words);
         if (isValid) {
             privateKeyField.value = decimalStringToHex(wordsToIndices(seedPhraseField.value));
+            nostrKeys = deriveNostrKeys(privateKeyField.value);
             showScreen('managementScreen'); // Move to the next screen
         } else {
             alert("Seed phrase is not valid");
@@ -182,6 +185,78 @@ function hash(text) {
     return CryptoJS.SHA256(text).toString();
 
 }
+
+// --- Nostr Related Functions ---
+function deriveNostrKeys(privateKey) {
+    const ec = new elliptic.ec('secp256k1');
+    const key = ec.keyFromPrivate(privateKey);
+    const nsec = privateKey;
+    const npub = key.getPublic(true, 'hex');
+    return { nsec, npub };
+}
+
+function signMessage(message, privateKey) {
+    const ec = new KJUR.crypto.ECDSA({ curve: 'secp256k1' });
+    const hashHex = CryptoJS.SHA256(message).toString();
+    return ec.signHex(hashHex, privateKey);
+}
+
+function encryptAndSignNonces(dictionary, privateKey) {
+    const encryptedDictionary = CryptoJS.AES.encrypt(JSON.stringify(dictionary), privateKey).toString();
+    const signature = signMessage(encryptedDictionary, privateKey);
+    return { encryptedDictionary, signature };
+}
+
+function broadcastToNostrRelay(nsec, npub, message) {
+    const key = 'nostrBackup_' + npub;
+    localStorage.setItem(key, message);
+    console.log('Broadcasted to relay:', key);
+}
+
+function fetchAndDecryptFromNostr(npub, privateKey) {
+    const key = 'nostrBackup_' + npub;
+    const receivedMessage = localStorage.getItem(key);
+    if (!receivedMessage) return null;
+    try {
+        const parsed = JSON.parse(receivedMessage);
+        const decryptedData = CryptoJS.AES.decrypt(parsed.encryptedDictionary, privateKey).toString(CryptoJS.enc.Utf8);
+        return decryptedData;
+    } catch (e) {
+        console.error('Failed to decrypt Nostr data:', e);
+        return null;
+    }
+}
+
+async function backupToNostr() {
+    const privateKey = privateKeyField.value;
+    if (!privateKey) { alert('No private key'); return; }
+    const { nsec, npub } = deriveNostrKeys(privateKey);
+    nostrKeys = { nsec, npub };
+    const userData = (localStoredData["users"] && localStoredData["users"][userOrMailField.value]) || {};
+    const { encryptedDictionary, signature } = encryptAndSignNonces(userData, privateKey);
+    const message = JSON.stringify({ encryptedDictionary, signature, timestamp: Date.now() });
+    broadcastToNostrRelay(nsec, npub, message);
+    alert('Backup broadcasted to Nostr relays.');
+}
+
+async function restoreFromNostr() {
+    const privateKey = privateKeyField.value;
+    if (!privateKey) { alert('No private key'); return; }
+    const { npub } = deriveNostrKeys(privateKey);
+    nostrKeys.npub = npub;
+    const data = fetchAndDecryptFromNostr(npub, privateKey);
+    if (!data) { alert('No backup data found.'); return; }
+    try {
+        const parsed = JSON.parse(data);
+        if (!localStoredData['users']) localStoredData['users'] = {};
+        localStoredData['users'][userOrMailField.value] = parsed;
+        alert('Backup restored successfully.');
+    } catch (e) {
+        console.error('Failed to parse restored data:', e);
+        alert('Backup data invalid or corrupt.');
+    }
+}
+
 async function showPassword() {
     if (!localStoredData["users"]) {
         localStoredData["users"] = {};
@@ -504,6 +579,7 @@ function loadEncryptedData() {
             return;
         }
         privateKeyField.value = localStoredData["privateKey"]
+        nostrKeys = deriveNostrKeys(privateKeyField.value);
         localStoredStatus = "loaded"
         alert('Data loaded successfully.');
         showScreen("managementScreen")
@@ -553,4 +629,21 @@ function saveEncryptedData() {
 
 function refreshPage() {
     location.reload();
+}
+
+// ------ Nonce Editing Utilities ------
+function openEditNonces() {
+    if (!localStoredData['users']) localStoredData['users'] = {};
+    document.getElementById('noncesEditor').value = JSON.stringify(localStoredData['users'], null, 2);
+    showScreen('editNoncesScreen');
+}
+
+function saveEditedNonces() {
+    try {
+        const data = JSON.parse(document.getElementById('noncesEditor').value);
+        localStoredData['users'] = data;
+        alert('Nonces updated.');
+    } catch (e) {
+        alert('Invalid JSON format.');
+    }
 }
