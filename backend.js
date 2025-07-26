@@ -187,22 +187,18 @@ function hash(text) {
 
 // --- Nostr Related Functions ---
 function deriveNostrKeys(privateKey) {
-    var ellipticLib = (typeof window !== 'undefined' && window.elliptic) ||
-                      (typeof elliptic !== 'undefined' && elliptic);
-    if (!ellipticLib) {
-        throw new Error('elliptic library not loaded');
+    if (typeof secp256k1 === 'undefined') {
+        throw new Error('secp256k1 library not loaded');
     }
-    const ec = new ellipticLib.ec('secp256k1');
-    const key = ec.keyFromPrivate(privateKey);
+    const npub = secp256k1.getPublicKey(privateKey);
     const nsec = privateKey;
-    const npub = key.getPublic(true, 'hex');
     return { nsec, npub };
 }
 
 function signMessage(message, privateKey) {
-    const ec = new KJUR.crypto.ECDSA({ curve: 'secp256k1' });
     const hashHex = CryptoJS.SHA256(message).toString();
-    return ec.signHex(hashHex, privateKey);
+    const sig = secp256k1.sign(hashHex, privateKey);
+    return sig.r + sig.s;
 }
 
 function encryptAndSignNonces(dictionary, privateKey) {
@@ -221,21 +217,65 @@ const NOSTR_RELAYS = [
     'wss://relay.nostr.band'
 ];
 
-// Nostr-tools SimplePool instance
-let nostrPool = null;
+// Global relay connections
+let relayConnections = new Map();
+let isConnecting = false;
 
-// Initialize pool (only once)
+// Connect to Nostr relays
 async function connectToRelays() {
-    if (nostrPool) return;
-    const { SimplePool } = window.NostrTools;
-    nostrPool = new SimplePool();
-    console.log('Initialized Nostr pool with relays', NOSTR_RELAYS);
+    if (isConnecting) return;
+    isConnecting = true;
+    console.log('Connecting to Nostr relays...');
+    const promises = NOSTR_RELAYS.map(relayUrl => {
+        return new Promise((resolve) => {
+            const ws = new WebSocket(relayUrl);
+            const timeout = setTimeout(() => {
+                ws.close();
+                resolve();
+            }, 5000);
+            ws.onopen = () => {
+                clearTimeout(timeout);
+                relayConnections.set(relayUrl, ws);
+                console.log('Connected to', relayUrl);
+                resolve();
+            };
+            ws.onerror = () => {
+                clearTimeout(timeout);
+                resolve();
+            };
+            ws.onclose = () => {
+                relayConnections.delete(relayUrl);
+                console.log('Disconnected from', relayUrl);
+            };
+        });
+    });
+    await Promise.all(promises);
+    isConnecting = false;
+    console.log('Active relays:', Array.from(relayConnections.keys()));
+}
+
+function generateEventId(event) {
+    const serialized = JSON.stringify([
+        0,
+        event.pubkey,
+        event.created_at,
+        event.kind,
+        event.tags,
+        event.content
+    ]);
+    return CryptoJS.SHA256(serialized).toString();
+}
+
+function signNostrEvent(event, privateKey) {
+    const eventId = generateEventId(event);
+    event.id = eventId;
+    const sig = secp256k1.sign(eventId, privateKey);
+    event.sig = sig.r + sig.s;
+    return event;
 }
 
 async function broadcastToNostrRelay(nsec, npub, content) {
     await connectToRelays();
-
-    const { getEventHash, signEvent } = window.NostrTools;
     const event = {
         kind: 30078,
         created_at: Math.floor(Date.now() / 1000),
@@ -243,21 +283,47 @@ async function broadcastToNostrRelay(nsec, npub, content) {
         content,
         pubkey: npub
     };
-
-    event.id = getEventHash(event);
-    event.sig = signEvent(event, nsec);
-
-    nostrPool.publish(NOSTR_RELAYS, event);
+    signNostrEvent(event, nsec);
+    const connected = Array.from(relayConnections.entries());
+    connected.forEach(([url, ws]) => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(['EVENT', event]));
+        }
+    });
     console.log('Published event', event.id);
     return event.id;
 }
 
 async function queryEvents(filter) {
     await connectToRelays();
-
-    const events = await nostrPool.list(NOSTR_RELAYS, [filter]);
-    events.sort((a, b) => b.created_at - a.created_at);
-    return events;
+    const subId = 'sub_' + Math.random().toString(36).slice(2);
+    const all = new Map();
+    const promises = Array.from(relayConnections.entries()).map(([url, ws]) => {
+        return new Promise(resolve => {
+            const events = [];
+            const handle = (ev) => {
+                try {
+                    const msg = JSON.parse(ev.data);
+                    if (msg[0] === 'EVENT' && msg[1] === subId) {
+                        all.set(msg[2].id, msg[2]);
+                        events.push(msg[2]);
+                    } else if (msg[0] === 'EOSE' && msg[1] === subId) {
+                        ws.removeEventListener('message', handle);
+                        resolve(events);
+                    }
+                } catch {}
+            };
+            ws.addEventListener('message', handle);
+            ws.send(JSON.stringify(['REQ', subId, filter]));
+            setTimeout(() => {
+                ws.removeEventListener('message', handle);
+                ws.send(JSON.stringify(['CLOSE', subId]));
+                resolve(events);
+            }, 15000);
+        });
+    });
+    await Promise.all(promises);
+    return Array.from(all.values()).sort((a,b)=>b.created_at-a.created_at);
 }
 
 function decryptNostrContent(event, privateKey) {
