@@ -209,8 +209,10 @@ function encryptAndSignNonces(dictionary, privateKey) {
 
 function broadcastToNostrRelay(nsec, npub, message) {
     const key = 'nostrBackup_' + npub;
+    const eventId = CryptoJS.SHA256(message).toString();
     localStorage.setItem(key, message);
-    console.log('Broadcasted to relay:', key);
+    console.log('Broadcasted to relay:', key, 'id:', eventId);
+    return eventId;
 }
 
 function fetchAndDecryptFromNostr(npub, privateKey) {
@@ -235,8 +237,8 @@ async function backupToNostr() {
     const userData = (localStoredData["users"] && localStoredData["users"][userOrMailField.value]) || {};
     const { encryptedDictionary, signature } = encryptAndSignNonces(userData, privateKey);
     const message = JSON.stringify({ encryptedDictionary, signature, timestamp: Date.now() });
-    broadcastToNostrRelay(nsec, npub, message);
-    alert('Backup broadcasted to Nostr relays.');
+    const eventId = broadcastToNostrRelay(nsec, npub, message);
+    alert('Backup broadcasted to Nostr relays. Event ID: ' + eventId);
 }
 
 async function restoreFromNostr() {
