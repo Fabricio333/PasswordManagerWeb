@@ -379,6 +379,9 @@
     <button class="option-btn" onclick="restoreFromNostr()">
         Restore Backup from Nostr
     </button>
+    <button class="option-btn" onclick="showScreen('restoreNostrIdScreen')">
+        Restore Using Event ID
+    </button>
     <button class="option-btn" onclick="openNostrHistory()">
         Nostr Backup History
     </button>
@@ -427,6 +430,24 @@
     <textarea class="input-field" id="noncesEditor" rows="10"></textarea>
     <button class="option-btn" onclick="saveEditedNonces()">Save Nonces</button>
     <button class="back-btn" onclick="navigateBack('editNoncesScreen')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+    </button>
+</div>
+
+<!-- Restore From Event ID Screen -->
+<div class="screen hidden" id="restoreNostrIdScreen">
+    <h2 class="title">Restore via Event ID</h2>
+    <div class="input-group">
+        <label class="input-label" for="nostrEventIdField">Event ID</label>
+        <input type="text" class="input-field" id="nostrEventIdField">
+    </div>
+    <button class="option-btn" onclick="const id=document.getElementById('nostrEventIdField').value.trim(); if(id){restoreFromNostrId(id);} else { alert('Enter an Event ID'); }">
+        Restore Backup
+    </button>
+    <button class="back-btn" onclick="navigateBack('restoreNostrIdScreen')">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>

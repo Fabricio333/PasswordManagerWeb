@@ -928,11 +928,20 @@ window.openNostrHistory = async function () {
                 el.style.margin = "5px 0";
                 el.style.border = "1px solid #ccc";
                 el.style.borderRadius = "5px";
+                el.style.cursor = "pointer";
+                el.title = "Tap to restore this backup";
                 el.innerHTML = `
                     <strong>📦 ${result.date}</strong><br>
                     <small>Relay: ${result.relay}</small><br>
                     <small>ID: ${result.id.substring(0, 16)}...</small>
                 `;
+                el.addEventListener("click", () => {
+                    if (typeof window.restoreFromNostrId === "function") {
+                        window.restoreFromNostrId(result.id);
+                    } else {
+                        alert("Restore function not available");
+                    }
+                });
                 container.appendChild(el);
             });
         } else {
@@ -947,5 +956,109 @@ window.openNostrHistory = async function () {
             container.innerHTML = `<p>⚠️ Failed to fetch history: ${error.message}</p>`;
         }
         alert("❌ Failed to fetch history: " + error.message);
+    }
+};
+
+window.restoreFromNostrId = async function (eventId) {
+    const { nip04, relayInit } = window.NostrTools;
+
+    if (window.restoreInProgress) return alert("Restore already in progress");
+    window.restoreInProgress = true;
+
+    const entropy = privateKeyField.value.trim();
+    if (!entropy) {
+        alert("Missing private key");
+        window.restoreInProgress = false;
+        return;
+    }
+
+    if (!window.relayList || !Array.isArray(window.relayList) || window.relayList.length === 0) {
+        window.relayList = [
+            "wss://relay.damus.io",
+            "wss://nostr-pub.wellorder.net",
+            "wss://relay.snort.social",
+            "wss://nos.lol"
+        ];
+        console.log("🔧 Initialized default relay list");
+    }
+
+    try {
+        const utf8 = new TextEncoder().encode(entropy);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", utf8);
+        const sk = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        let foundEvent = null;
+
+        const searchPromises = window.relayList.map(async (url) => {
+            try {
+                const relay = relayInit(url);
+
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+
+                    relay.on('connect', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+
+                    relay.on('error', (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
+                    });
+
+                    relay.connect();
+                });
+
+                const sub = relay.sub([{ ids: [eventId] }]);
+
+                await new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        sub.unsub();
+                        resolve();
+                    }, 8000);
+
+                    sub.on("event", (e) => {
+                        foundEvent = e;
+                        clearTimeout(timeout);
+                        sub.unsub();
+                        resolve();
+                    });
+
+                    sub.on("eose", () => {
+                        clearTimeout(timeout);
+                        sub.unsub();
+                        resolve();
+                    });
+                });
+
+                relay.close();
+            } catch (err) {
+                console.error(`🔥 Error on relay ${url}:`, err.message);
+            }
+        });
+
+        await Promise.allSettled(searchPromises);
+
+        if (foundEvent) {
+            try {
+                const decrypted = await nip04.decrypt(sk, foundEvent.pubkey, foundEvent.content);
+                const parsedData = JSON.parse(decrypted);
+                localStoredData = parsedData;
+                localStoredStatus = "loaded";
+
+                alert("✅ Restore complete from NOSTR");
+                showScreen("managementScreen");
+            } catch (err) {
+                console.error("❌ Failed to decrypt/parse:", err);
+                alert("⚠️ Could not decrypt or parse restored data");
+            }
+        } else {
+            alert("⚠️ Backup not found on any relay");
+        }
+    } catch (error) {
+        console.error("🔥 Restore failed:", error);
+        alert("❌ Restore failed: " + error.message);
+    } finally {
+        window.restoreInProgress = false;
     }
 };
