@@ -138,4 +138,5 @@ Explore the full source code on GitHub: [GitHub Repository](https://github.com/f
 - from the private key, derivate a nostr nsec and npub that will be used to sign and broadcast events to nostr relays
 - By Pressing the button the user puashes its nonces dictionary in a dictionary encrypted by the private key, then it will be signed by the same private key and broadcasted to nostr relays.
 - When the user wants to restore its nostr relays nonces backup and status, the latest event broadcasted by that npub gets pulled and decrypted with the main private key
+- A dedicated history screen lists previous backups; touching one restores that specific event ID. You can also paste an event ID manually to restore.
 - There has to be in the ui another option to edit the nonces values and push them again to edit if wrong.
