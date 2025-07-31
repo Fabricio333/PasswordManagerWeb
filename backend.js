@@ -216,7 +216,6 @@ async function showPassword() {
         localStoredData["users"] = {};
     }
     if (!localStoredData["users"][userOrMailField.value]) {
-        alert("A password for a new user or email is being created.")
         localStoredData["users"][userOrMailField.value] = {};
     }
     // Check if the site input is empty
@@ -224,30 +223,27 @@ async function showPassword() {
         alert('The site input is empty');
         return;
     }
-    let nonces = localStoredData["users"][userOrMailField.value]
-
-    // Initialize or load the nonce for the site
-    if (nonces[siteField.value] === undefined) {
-        alert("A password for a new site is being created.");
-        console.log(`Initialized nonce for site: ${siteField.value} with ui value ${nonceField.value}`);
+    let nonces = localStoredData["users"][userOrMailField.value];
+    const storedNonce = nonces[siteField.value];
+    const nonceValue = parseInt(nonceField.value, 10) || 0;
+    if (storedNonce !== undefined) {
+        console.log(`Loaded nonce for site: ${siteField.value} = ${storedNonce}`);
     } else {
-        nonceField.value = nonces[siteField.value];
-        console.log(`Loaded nonce for site: ${siteField.value} = ${nonces[siteField.value]}`);
+        console.log(`Initialized nonce for site: ${siteField.value} with ui value ${nonceValue}`);
     }
 
-    console.log(localStoredData)
+    console.log(localStoredData);
 
     /*
     prepare all the verification processes to ensure proper data input
     */
-    const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonceField.value ;
+    const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonceValue;
     console.log(concatenado)
 
-        const entropiaContraseña = hash(concatenado).substring(0, 16);
-        passwordField.value = 'PASS' + entropiaContraseña + '249+';
-
+    const entropiaContraseña = hash(concatenado).substring(0, 16);
+    passwordField.value = 'PASS' + entropiaContraseña + '249+';
     // Persist the nonce used to generate the password
-    localStoredData["users"][userOrMailField.value][siteField.value] = parseInt(nonceField.value, 10) || 0;
+    localStoredData["users"][userOrMailField.value][siteField.value] = nonceValue;
 }
 
 function generateValidMnemonic() {
