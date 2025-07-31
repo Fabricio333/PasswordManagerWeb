@@ -14,6 +14,10 @@ var nostrKeys = { nsec: "", npub: "" };
 const navigationHistory = ["welcomeScreen"];
 let currentScreenId = "welcomeScreen";
 
+// Update nonce UI from stored data when user or site changes
+userOrMailField.addEventListener("input", updateNonceFromLocalStorage);
+siteField.addEventListener("input", updateNonceFromLocalStorage);
+
 function showScreen(screenId, isBackNavigation = false) {
     // Hide all screens
     document.querySelectorAll('.screen').forEach(screen => {
@@ -223,12 +227,11 @@ async function showPassword() {
     let nonces = localStoredData["users"][userOrMailField.value]
 
     // Initialize or load the nonce for the site
-    if (!nonces[siteField.value]) {
-        alert("A password for a new site is being created.")
-        localStoredData["users"][userOrMailField.value][siteField.value] = 0;
-        nonces = localStoredData["users"][userOrMailField.value]
-        console.log(`Initialized nonce for site: ${siteField.value} el nonce es: ${nonces[siteField.value]}`);
+    if (nonces[siteField.value] === undefined) {
+        alert("A password for a new site is being created.");
+        console.log(`Initialized nonce for site: ${siteField.value} with ui value ${nonceField.value}`);
     } else {
+        nonceField.value = nonces[siteField.value];
         console.log(`Loaded nonce for site: ${siteField.value} = ${nonces[siteField.value]}`);
     }
 
@@ -242,6 +245,9 @@ async function showPassword() {
 
         const entropiaContraseña = hash(concatenado).substring(0, 16);
         passwordField.value = 'PASS' + entropiaContraseña + '249+';
+
+    // Persist the nonce used to generate the password
+    localStoredData["users"][userOrMailField.value][siteField.value] = parseInt(nonceField.value, 10) || 0;
 }
 
 function generateValidMnemonic() {
@@ -304,45 +310,33 @@ function generateValidMnemonic() {
 }
 
 function updateNonceFromLocalStorage() {
-    const privateKey = document.getElementById("privateKeyField").value;
-    const userOrMail = document.getElementById("userOrMailField").value;
-    const site = document.getElementById("siteField").value;
-    const nonceField = document.getElementById("nonceField");
+    const userOrMail = userOrMailField.value;
+    const site = siteField.value;
 
-    if (!privateKey || !userOrMail || !site) {
-        console.log("no private key, user or site")
+    if (!userOrMail || !site) {
+        nonceField.value = 0;
         return;
     }
-    if(localStoredStatus==="loaded"){
-        try{
-            nonceField.value = localStoredData["users"][userOrMail][site];
-        }
-        catch (error){
-            console.log("no nonce on the encrypted local storage")
-        }
-    }
-    console.log(localStoredData)
+
+    const nonce = localStoredData?.users?.[userOrMail]?.[site];
+    nonceField.value = (nonce !== undefined) ? nonce : 0;
 }
 
 function incrementSiteNonce() {
-    const userOrMail = document.getElementById("userOrMailField").value;
-    const site = document.getElementById("siteField").value;
-    const nonceField = document.getElementById("nonceField");
+    const userOrMail = userOrMailField.value;
+    const site = siteField.value;
     if (!userOrMail || !site){
-    alert("there is no site or user value")
+        alert("there is no site or user value")
         return
-}
-    // agregar error al incrementar nonce, primero crear primera contraseña
+    }
     let nonce = parseInt(nonceField.value, 10) || 0;
     nonce++;
     nonceField.value = nonce;
-    localStoredData["users"][userOrMail][site] = nonce;
 }
 
 function decrementSiteNonce() {
-    const userOrMail = document.getElementById("userOrMailField").value;
-    const site = document.getElementById("siteField").value;
-    const nonceField = document.getElementById("nonceField");
+    const userOrMail = userOrMailField.value;
+    const site = siteField.value;
     if (!userOrMail || !site) {
         alert("there is no site or user value")
         return
@@ -351,7 +345,6 @@ function decrementSiteNonce() {
     if (nonce > 0) {
         nonce--;
         nonceField.value = nonce;
-        localStoredData["users"][userOrMail][site] = nonce
     }
 }
 
