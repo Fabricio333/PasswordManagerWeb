@@ -18,6 +18,17 @@ let currentScreenId = "welcomeScreen";
 userOrMailField.addEventListener("input", updateNonceFromLocalStorage);
 siteField.addEventListener("input", updateNonceFromLocalStorage);
 
+function togglePrivateKeyVisibility() {
+    const btn = document.getElementById("togglePrivateKeyBtn");
+    if (privateKeyField.type === "password") {
+        privateKeyField.type = "text";
+        btn.textContent = "🙈";
+    } else {
+        privateKeyField.type = "password";
+        btn.textContent = "👁️";
+    }
+}
+
 function showScreen(screenId, isBackNavigation = false) {
     // Hide all screens
     document.querySelectorAll('.screen').forEach(screen => {
