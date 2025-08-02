@@ -13,6 +13,9 @@ A deterministic password vault with optional Nostr cloud backups.
   - [Encrypt Local Data (Optional)](#encrypt-local-data-optional)
   - [Backup Your Seed Phrase](#backup-your-seed-phrase)
   - [Decrypt Stored Data](#decrypt-stored-data)
+- [Derivation and Nonces](#derivation-and-nonces)
+  - [Mnemonic to Private Key](#mnemonic-to-private-key)
+  - [Nonce Mechanics](#nonce-mechanics)
 - [Nostr Integration](#nostr-integration)
   - [Key Derivation](#key-derivation)
   - [Backing Up to Nostr](#backing-up-to-nostr)
@@ -72,6 +75,24 @@ Always write down your seed phrase so you can recover your vault.
 ### Decrypt Stored Data
 Use the same encryption password to load previously stored session data.
 
+## Derivation and Nonces
+
+### Mnemonic to Private Key
+1. Enter a BIP39 seed phrase consisting of valid words from the official list.
+2. Each word is validated and converted to its numeric index (0–2047).
+3. The indices are concatenated into a single decimal string representing a large integer.
+4. That decimal value is transformed into hexadecimal, producing a 64‑character private key.
+5. The same mnemonic always derives the exact same private key, enabling deterministic password generation.
+
+### Nonce Mechanics
+The nonce acts as a per‑site counter so you can rotate passwords without changing other inputs.
+
+1. Each combination of username and site starts with a nonce of `0`.
+2. The app concatenates `privateKey/username/site/nonce` and hashes it using SHA‑256.
+3. The first 16 hex characters of the hash are embedded into the password template.
+4. Increasing the nonce yields a completely new password while leaving the seed phrase untouched.
+5. Nonces are stored locally for each site and restored automatically on future visits.
+
 ---
 
 ## Nostr Integration
@@ -121,3 +142,8 @@ Try it out: [Password Manager Web](https://fabricio333.github.io/PasswordManager
 
 ## Source Code
 View the full code on [GitHub](https://github.com/fabricio333/PasswordManagerWeb).
+
+## Pending Tasks
+- [ ] duplicate the characters of entrophy
+- [ ] re audit code and dependencies
+- [ ] set a game theory playbook of all things can go wrong
