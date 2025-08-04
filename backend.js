@@ -251,7 +251,7 @@ async function showPassword() {
     const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonceValue;
     console.log(concatenado)
 
-    const entropiaContraseña = hash(concatenado).substring(0, 16);
+    const entropiaContraseña = hash(concatenado).substring(0, 8);
     passwordField.value = 'PASS' + entropiaContraseña + '249+';
     // Persist the nonce used to generate the password
     localStoredData["users"][userOrMailField.value][siteField.value] = nonceValue;
