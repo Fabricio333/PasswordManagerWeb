@@ -93,6 +93,8 @@ const event = {
 ```
 Each relay is contacted and the event is signed with your `nsec` before being sent.
 
+The same encrypted payload is also written to your browser's `localStorage` under the key `nostrBackup`. On startup, the application automatically loads and decrypts this local copy using your key pair. If you later restore a backup from the Nostr network, the local copy is overwritten to keep everything in sync.
+
 ### Restoring from Nostr
 `restoreFromNostr` downloads the latest backup event from the relays using your `npub`, decrypts it with `nip04` and loads the data back into the app.
 
