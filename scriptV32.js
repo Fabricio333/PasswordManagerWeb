@@ -8,6 +8,7 @@ var nonceField = document.getElementById("nonceField");
 var newSeedPhraseField = document.getElementById("newSeedPhraseField");
 var localStoredData = {}
 var localStoredStatus = ""
+const LOCAL_NOSTR_BACKUP_KEY = "nostrBackup";
 // Object to store derived nostr keys
 var nostrKeys = { nsec: "", npub: "" };
 // Navigation history stack
@@ -207,7 +208,10 @@ async function verifySeedAndMoveNext() {
         // 4. Save for global use
         nostrKeys = { nsec, npub };
 
-        // 5. Continue
+        // 5. Load local encrypted nonce data if present
+        await loadNostrBackupFromLocalStorage();
+
+        // 6. Continue
         showScreen('managementScreen');
 
     } catch (error) {
@@ -464,6 +468,38 @@ function saveDictionary(key, dictionary) {
     console.log('Dict Saved')
 }
 
+function saveNostrBackupToLocalStorage(encrypted) {
+    try {
+        localStorage.setItem(LOCAL_NOSTR_BACKUP_KEY, encrypted);
+        console.log('Encrypted nonce data saved locally');
+    } catch (e) {
+        console.error('Failed to save encrypted nonce data:', e);
+    }
+}
+
+async function loadNostrBackupFromLocalStorage() {
+    try {
+        const encrypted = localStorage.getItem(LOCAL_NOSTR_BACKUP_KEY);
+        if (!encrypted) return;
+        const { nip04, getPublicKey } = window.NostrTools;
+        const entropy = privateKeyField.value.trim();
+        if (!entropy) return;
+
+        const utf8 = new TextEncoder().encode(entropy);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
+        const sk = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const pk = getPublicKey(sk);
+        const decrypted = await nip04.decrypt(sk, pk, encrypted);
+        const parsed = JSON.parse(decrypted);
+        localStoredData = parsed;
+        localStoredStatus = 'loaded';
+        updateNonceFromLocalStorage();
+        console.log('Loaded nonce data from local storage');
+    } catch (e) {
+        console.error('Failed to load local encrypted nonce data:', e);
+    }
+}
+
 function loadEncryptedData() {
     const passwordInput = document.getElementById('encryptionPassword');
     const password = passwordInput.value.trim();
@@ -602,6 +638,7 @@ window.backupToNostr = async function () {
 
         const data = JSON.stringify(localStoredData);
         const encrypted = await nip04.encrypt(sk, pk, data);
+        saveNostrBackupToLocalStorage(encrypted);
         console.log("🔐 Data encrypted successfully");
 
         const event = {
@@ -799,6 +836,8 @@ window.restoreFromNostr = async function () {
                 const parsedData = JSON.parse(decrypted);
                 localStoredData = parsedData;
                 localStoredStatus = "loaded";
+                saveNostrBackupToLocalStorage(latestEvent.content);
+                updateNonceFromLocalStorage();
 
                 alert("✅ Restore complete from NOSTR");
                 showScreen("managementScreen");
@@ -1045,6 +1084,8 @@ window.restoreFromNostrId = async function (eventId) {
                 const parsedData = JSON.parse(decrypted);
                 localStoredData = parsedData;
                 localStoredStatus = "loaded";
+                saveNostrBackupToLocalStorage(foundEvent.content);
+                updateNonceFromLocalStorage();
 
                 alert("✅ Restore complete from NOSTR");
                 showScreen("managementScreen");
