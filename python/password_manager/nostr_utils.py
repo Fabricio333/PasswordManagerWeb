@@ -27,6 +27,21 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 logger = logging.getLogger(__name__)
 
 
+def _configure_debug_logging(debug: bool) -> None:
+    """Ensure debug messages are emitted to the terminal when ``debug`` is ``True``."""
+    if not debug:
+        return
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    if not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+        )
+        root_logger.addHandler(handler)
+
+
 # File used to store simulated Nostr backup events
 BACKUP_FILE = Path(__file__).resolve().parent / "nostr_backups.json"
 
@@ -104,7 +119,8 @@ def _encrypt_nip04(priv: ec.EllipticCurvePrivateKey, plaintext: str) -> str:
     padder = padding.PKCS7(128).padder()
     padded = padder.update(plaintext.encode()) + padder.finalize()
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    ct = cipher.encryptor().update(padded) + cipher.encryptor().finalize()
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(padded) + encryptor.finalize()
     return f"{base64.b64encode(ct).decode()}?iv={base64.b64encode(iv).decode()}"
 
 
@@ -121,7 +137,8 @@ def _decrypt_nip04(priv: ec.EllipticCurvePrivateKey, ciphertext: str) -> str:
     iv = base64.b64decode(iv_b64)
     ct = base64.b64decode(data)
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    padded = cipher.decryptor().update(ct) + cipher.decryptor().finalize()
+    decryptor = cipher.decryptor()
+    padded = decryptor.update(ct) + decryptor.finalize()
     unpadder = padding.PKCS7(128).unpadder()
     plaintext = unpadder.update(padded) + unpadder.finalize()
     return plaintext.decode()
@@ -181,8 +198,7 @@ def backup_to_nostr(
         backup.
     """
 
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
+    _configure_debug_logging(debug)
 
     sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
     content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True))
@@ -214,8 +230,7 @@ def restore_from_nostr(
 ) -> Dict:
     """Restore backup data for the provided key from the simulated storage."""
 
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
+    _configure_debug_logging(debug)
 
     if relay_urls:
         logger.debug(

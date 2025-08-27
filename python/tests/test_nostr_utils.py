@@ -19,3 +19,22 @@ def test_backup_and_restore(tmp_path, monkeypatch):
 
     restored = restore_from_nostr(key, debug=True)
     assert restored == data
+
+
+def test_debug_logging(tmp_path, monkeypatch, capsys):
+    """Debug logging should emit messages to the terminal when enabled."""
+    temp_file = tmp_path / "backups.json"
+    monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
+
+    # Preconfigure logging to a non-debug level with an existing handler
+    import logging
+
+    handler = logging.StreamHandler()
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(logging.WARNING)
+
+    backup_to_nostr("deadbeef", {"foo": "bar"}, debug=True)
+
+    captured = capsys.readouterr()
+    assert "Deriving Nostr keys" in captured.err or captured.out
