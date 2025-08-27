@@ -1,0 +1,4 @@
+Flask
+mnemonic
+cryptography
+secp256k1
