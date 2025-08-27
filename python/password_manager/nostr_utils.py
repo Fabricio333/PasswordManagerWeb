@@ -280,6 +280,35 @@ def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
     return None
 
 
+def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50) -> List[Dict]:
+    """Fetch up to ``limit`` backup events for ``pk_hex`` from ``url``."""
+    logger.debug("Connecting to relay %s", url)
+    ws = _WSConnection(url)
+    events: List[Dict] = []
+    try:
+        sub_id = os.urandom(4).hex()
+        filt = {
+            "authors": [pk_hex],
+            "#t": ["nostr-pwd-backup"],
+            "kinds": [1],
+            "limit": limit,
+        }
+        req = json.dumps(["REQ", sub_id, filt])
+        logger.debug("Sending to %s: %s", url, req)
+        ws.send(req)
+        while True:
+            msg = ws.recv()
+            logger.debug("Received from %s: %s", url, msg)
+            data = json.loads(msg)
+            if data and data[0] == "EVENT" and data[1] == sub_id:
+                events.append(data[2])
+            if data and data[0] == "EOSE" and data[1] == sub_id:
+                break
+    finally:
+        ws.close()
+    return events
+
+
 def backup_to_nostr(
     private_key_hex: str,
     data: Dict,
@@ -363,3 +392,38 @@ def restore_from_nostr(
             decrypted = _decrypt_nip04(priv, event.get("content", ""))
             return json.loads(decrypted)
     raise ValueError("No backup found for provided key")
+
+
+def restore_history_from_nostr(
+    private_key_hex: str,
+    relay_urls: Optional[List[str]] = None,
+    debug: bool = False,
+    limit: int = 50,
+) -> List[Dict]:
+    """Return a list of all decrypted backup entries for the key."""
+
+    _configure_debug_logging(debug)
+
+    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
+
+    events: List[Dict] = []
+    if relay_urls:
+        for url in relay_urls:
+            try:
+                events.extend(_fetch_history_from_relay(url, pk_hex, limit))
+            except Exception as exc:
+                logger.debug("Failed to fetch history from %s: %s", url, exc)
+    elif BACKUP_FILE.exists():
+        backups = json.loads(BACKUP_FILE.read_text())
+        events = [e for e in backups if e.get("pubkey") == pk_hex]
+
+    history: List[Dict] = []
+    for event in events:
+        try:
+            decrypted = _decrypt_nip04(priv, event.get("content", ""))
+            item = json.loads(decrypted)
+            item["event_id"] = event.get("id")
+            history.append(item)
+        except Exception as exc:
+            logger.debug("Failed to decrypt event %s: %s", event.get("id"), exc)
+    return history
