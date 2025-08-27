@@ -71,7 +71,7 @@ class PasswordManagerGUI(tk.Tk):
             "nonce": self.nonce_entry.get().strip(),
             "password": self.password_var.get(),
         }
-        event_id = backup_to_nostr(self.keys["private_key"], data)
+        event_id = backup_to_nostr(self.keys["private_key"], data, debug=True)
         messagebox.showinfo("Backup", f"Backup stored with id {event_id}")
 
     def restore(self):
@@ -79,7 +79,7 @@ class PasswordManagerGUI(tk.Tk):
             messagebox.showerror("Error", "Verify the seed first")
             return
         try:
-            data = restore_from_nostr(self.keys["private_key"])
+            data = restore_from_nostr(self.keys["private_key"], debug=True)
         except Exception as exc:
             messagebox.showerror("Restore", str(exc))
             return

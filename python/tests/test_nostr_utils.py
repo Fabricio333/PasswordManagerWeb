@@ -9,9 +9,13 @@ def test_backup_and_restore(tmp_path, monkeypatch):
     key = "deadbeef"
     data = {"foo": "bar"}
 
-    event_id = backup_to_nostr(key, data)
+    event_id = backup_to_nostr(key, data, debug=True)
     assert temp_file.exists()
     assert isinstance(event_id, str)
 
-    restored = restore_from_nostr(key)
+    # Ensure the stored content is encrypted (not raw JSON)
+    stored = json.loads(temp_file.read_text())[-1]
+    assert stored["content"] != json.dumps(data, sort_keys=True)
+
+    restored = restore_from_nostr(key, debug=True)
     assert restored == data
