@@ -6,4 +6,5 @@ def test_generate_password():
     combo = "priv/user/site/1"
     digest = hashlib.sha256(combo.encode()).hexdigest()[:16]
     expected = f"PASS{digest}249+"
+    print(expected)
     assert pwd == expected
