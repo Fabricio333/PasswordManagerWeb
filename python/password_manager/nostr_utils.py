@@ -16,6 +16,9 @@ import hashlib
 import logging
 import os
 import time
+import socket
+import ssl
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -25,6 +28,21 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_debug_logging(debug: bool) -> None:
+    """Ensure debug messages are emitted to the terminal when ``debug`` is ``True``."""
+    if not debug:
+        return
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    if not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+        )
+        root_logger.addHandler(handler)
 
 
 # File used to store simulated Nostr backup events
@@ -104,7 +122,8 @@ def _encrypt_nip04(priv: ec.EllipticCurvePrivateKey, plaintext: str) -> str:
     padder = padding.PKCS7(128).padder()
     padded = padder.update(plaintext.encode()) + padder.finalize()
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    ct = cipher.encryptor().update(padded) + cipher.encryptor().finalize()
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(padded) + encryptor.finalize()
     return f"{base64.b64encode(ct).decode()}?iv={base64.b64encode(iv).decode()}"
 
 
@@ -121,7 +140,8 @@ def _decrypt_nip04(priv: ec.EllipticCurvePrivateKey, ciphertext: str) -> str:
     iv = base64.b64decode(iv_b64)
     ct = base64.b64decode(data)
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    padded = cipher.decryptor().update(ct) + cipher.decryptor().finalize()
+    decryptor = cipher.decryptor()
+    padded = decryptor.update(ct) + decryptor.finalize()
     unpadder = padding.PKCS7(128).unpadder()
     plaintext = unpadder.update(padded) + unpadder.finalize()
     return plaintext.decode()
@@ -154,6 +174,147 @@ def _create_event(sk_hex: str, pk_hex: str, content: str) -> Dict:
     return nostr_event
 
 
+class _WSConnection:
+    """Minimal WebSocket client supporting ws:// and wss:// URLs."""
+
+    def __init__(self, url: str):
+        parsed = urlparse(url)
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+        path = parsed.path or "/"
+        logger.debug("WebSocket connection to %s opening", url)
+        try:
+            raw = socket.create_connection((host, port), timeout=5)
+            if parsed.scheme == "wss":
+                context = ssl.create_default_context()
+                self.sock = context.wrap_socket(raw, server_hostname=host)
+            else:
+                self.sock = raw
+            key = base64.b64encode(os.urandom(16)).decode()
+            headers = (
+                f"GET {path} HTTP/1.1\r\n"
+                f"Host: {host}:{port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\n\r\n"
+            )
+            self.sock.sendall(headers.encode())
+            self._recv_http_response()
+            logger.debug("WebSocket connection to %s established", url)
+        except Exception as exc:
+            logger.debug("WebSocket connection to %s failed: %s", url, exc)
+            raise
+
+    def _recv_http_response(self) -> None:
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = self.sock.recv(1024)
+            if not chunk:
+                break
+            data += chunk
+
+    def send(self, message: str) -> None:
+        payload = message.encode()
+        frame = bytearray()
+        frame.append(0x81)  # FIN + text frame
+        length = len(payload)
+        if length < 126:
+            frame.append(0x80 | length)
+        elif length < 65536:
+            frame.append(0x80 | 126)
+            frame += length.to_bytes(2, "big")
+        else:
+            frame.append(0x80 | 127)
+            frame += length.to_bytes(8, "big")
+        mask = os.urandom(4)
+        frame += mask
+        frame += bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        self.sock.sendall(frame)
+
+    def recv(self) -> str:
+        header = self.sock.recv(2)
+        if len(header) < 2:
+            raise ConnectionError("Connection closed")
+        b1, b2 = header
+        length = b2 & 0x7F
+        if length == 126:
+            length = int.from_bytes(self.sock.recv(2), "big")
+        elif length == 127:
+            length = int.from_bytes(self.sock.recv(8), "big")
+        data = self.sock.recv(length)
+        return data.decode()
+
+    def close(self) -> None:
+        self.sock.close()
+
+
+def _publish_event_to_relay(url: str, event: Dict) -> None:
+    """Publish ``event`` to the relay at ``url`` using WebSockets."""
+    logger.debug("Connecting to relay %s", url)
+    ws = _WSConnection(url)
+    try:
+        msg = json.dumps(["EVENT", event])
+        logger.debug("Sending to %s: %s", url, msg)
+        ws.send(msg)
+        resp = ws.recv()
+        logger.debug("Received from %s: %s", url, resp)
+    finally:
+        ws.close()
+
+
+def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
+    """Fetch the most recent backup event for ``pk_hex`` from ``url``."""
+    logger.debug("Connecting to relay %s", url)
+    ws = _WSConnection(url)
+    try:
+        sub_id = os.urandom(4).hex()
+        filt = {"authors": [pk_hex], "#t": ["nostr-pwd-backup"], "kinds": [1], "limit": 1}
+        req = json.dumps(["REQ", sub_id, filt])
+        logger.debug("Sending to %s: %s", url, req)
+        ws.send(req)
+        while True:
+            msg = ws.recv()
+            logger.debug("Received from %s: %s", url, msg)
+            data = json.loads(msg)
+            if data and data[0] == "EVENT" and data[1] == sub_id:
+                return data[2]
+            if data and data[0] == "EOSE" and data[1] == sub_id:
+                break
+    finally:
+        ws.close()
+    return None
+
+
+def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50) -> List[Dict]:
+    """Fetch up to ``limit`` backup events for ``pk_hex`` from ``url``."""
+    logger.debug("Connecting to relay %s", url)
+    ws = _WSConnection(url)
+    events: List[Dict] = []
+    try:
+        sub_id = os.urandom(4).hex()
+        filt = {
+            "authors": [pk_hex],
+            "#t": ["nostr-pwd-backup"],
+            "kinds": [1],
+            "limit": limit,
+        }
+        req = json.dumps(["REQ", sub_id, filt])
+        logger.debug("Sending to %s: %s", url, req)
+        ws.send(req)
+        while True:
+            msg = ws.recv()
+            logger.debug("Received from %s: %s", url, msg)
+            data = json.loads(msg)
+            if data and data[0] == "EVENT" and data[1] == sub_id:
+                events.append(data[2])
+            if data and data[0] == "EOSE" and data[1] == sub_id:
+                break
+    finally:
+        ws.close()
+    return events
+
+
 def backup_to_nostr(
     private_key_hex: str,
     data: Dict,
@@ -181,23 +342,20 @@ def backup_to_nostr(
         backup.
     """
 
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
+    _configure_debug_logging(debug)
 
     sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
     content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True))
     event = _create_event(sk_hex, pk_hex, content)
 
     if relay_urls:
-        logger.debug(
-            "Relay URLs provided (%s) but network publishing is not "
-            "implemented in this environment.",
-            relay_urls,
-        )
+        for url in relay_urls:
+            try:
+                _publish_event_to_relay(url, event)
+            except Exception as exc:
+                logger.debug("Failed to publish to %s: %s", url, exc)
 
-    # In this educational environment we simply append the event to a JSON
-    # file.  A full implementation would publish the event to the provided
-    # relay URLs using WebSockets.
+    # Always persist the event locally as a simple form of backup
     logger.debug("Writing event to %s", BACKUP_FILE)
     backups = []
     if BACKUP_FILE.exists():
@@ -214,22 +372,25 @@ def restore_from_nostr(
 ) -> Dict:
     """Restore backup data for the provided key from the simulated storage."""
 
-    if debug:
-        logging.basicConfig(level=logging.DEBUG)
+    _configure_debug_logging(debug)
+
+    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
 
     if relay_urls:
-        logger.debug(
-            "Relay URLs provided (%s) but network retrieval is not "
-            "implemented in this environment.",
-            relay_urls,
-        )
+        for url in relay_urls:
+            try:
+                event = _fetch_event_from_relay(url, pk_hex)
+            except Exception as exc:
+                logger.debug("Failed to fetch from %s: %s", url, exc)
+                event = None
+            if event:
+                decrypted = _decrypt_nip04(priv, event.get("content", ""))
+                return json.loads(decrypted)
 
     if not BACKUP_FILE.exists():
         raise FileNotFoundError("No backups available")
 
-    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
     logger.debug("Looking for events matching pubkey %s", pk_hex)
-
     backups = json.loads(BACKUP_FILE.read_text())
     for event in reversed(backups):
         if event.get("pubkey") == pk_hex:
@@ -237,3 +398,38 @@ def restore_from_nostr(
             decrypted = _decrypt_nip04(priv, event.get("content", ""))
             return json.loads(decrypted)
     raise ValueError("No backup found for provided key")
+
+
+def restore_history_from_nostr(
+    private_key_hex: str,
+    relay_urls: Optional[List[str]] = None,
+    debug: bool = False,
+    limit: int = 50,
+) -> List[Dict]:
+    """Return a list of all decrypted backup entries for the key."""
+
+    _configure_debug_logging(debug)
+
+    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
+
+    events: List[Dict] = []
+    if relay_urls:
+        for url in relay_urls:
+            try:
+                events.extend(_fetch_history_from_relay(url, pk_hex, limit))
+            except Exception as exc:
+                logger.debug("Failed to fetch history from %s: %s", url, exc)
+    elif BACKUP_FILE.exists():
+        backups = json.loads(BACKUP_FILE.read_text())
+        events = [e for e in backups if e.get("pubkey") == pk_hex]
+
+    history: List[Dict] = []
+    for event in events:
+        try:
+            decrypted = _decrypt_nip04(priv, event.get("content", ""))
+            item = json.loads(decrypted)
+            item["event_id"] = event.get("id")
+            history.append(item)
+        except Exception as exc:
+            logger.debug("Failed to decrypt event %s: %s", event.get("id"), exc)
+    return history
