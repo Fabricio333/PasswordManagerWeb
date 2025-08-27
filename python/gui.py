@@ -13,7 +13,10 @@ class PasswordManagerGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("SecureVault Manager")
-        self.geometry("400x400")
+        # Original interface was 400x400 which became cramped as new
+        # functionality was added. Increase the height to provide more space
+        # for additional controls while keeping the width unchanged.
+        self.geometry("400x600")
 
         # Seed phrase entry
         tk.Label(self, text="Seed Phrase").pack()

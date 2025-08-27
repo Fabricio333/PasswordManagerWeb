@@ -16,6 +16,9 @@ import hashlib
 import logging
 import os
 import time
+import socket
+import ssl
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -171,6 +174,112 @@ def _create_event(sk_hex: str, pk_hex: str, content: str) -> Dict:
     return nostr_event
 
 
+class _WSConnection:
+    """Minimal WebSocket client supporting ws:// and wss:// URLs."""
+
+    def __init__(self, url: str):
+        parsed = urlparse(url)
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+        path = parsed.path or "/"
+        raw = socket.create_connection((host, port))
+        if parsed.scheme == "wss":
+            context = ssl.create_default_context()
+            self.sock = context.wrap_socket(raw, server_hostname=host)
+        else:
+            self.sock = raw
+        key = base64.b64encode(os.urandom(16)).decode()
+        headers = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n"
+        )
+        self.sock.sendall(headers.encode())
+        self._recv_http_response()
+
+    def _recv_http_response(self) -> None:
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = self.sock.recv(1024)
+            if not chunk:
+                break
+            data += chunk
+
+    def send(self, message: str) -> None:
+        payload = message.encode()
+        frame = bytearray()
+        frame.append(0x81)  # FIN + text frame
+        length = len(payload)
+        if length < 126:
+            frame.append(0x80 | length)
+        elif length < 65536:
+            frame.append(0x80 | 126)
+            frame += length.to_bytes(2, "big")
+        else:
+            frame.append(0x80 | 127)
+            frame += length.to_bytes(8, "big")
+        mask = os.urandom(4)
+        frame += mask
+        frame += bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        self.sock.sendall(frame)
+
+    def recv(self) -> str:
+        header = self.sock.recv(2)
+        if len(header) < 2:
+            raise ConnectionError("Connection closed")
+        b1, b2 = header
+        length = b2 & 0x7F
+        if length == 126:
+            length = int.from_bytes(self.sock.recv(2), "big")
+        elif length == 127:
+            length = int.from_bytes(self.sock.recv(8), "big")
+        data = self.sock.recv(length)
+        return data.decode()
+
+    def close(self) -> None:
+        self.sock.close()
+
+
+def _publish_event_to_relay(url: str, event: Dict) -> None:
+    """Publish ``event`` to the relay at ``url`` using WebSockets."""
+    logger.debug("Connecting to relay %s", url)
+    ws = _WSConnection(url)
+    try:
+        msg = json.dumps(["EVENT", event])
+        logger.debug("Sending to %s: %s", url, msg)
+        ws.send(msg)
+        resp = ws.recv()
+        logger.debug("Received from %s: %s", url, resp)
+    finally:
+        ws.close()
+
+
+def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
+    """Fetch the most recent backup event for ``pk_hex`` from ``url``."""
+    logger.debug("Connecting to relay %s", url)
+    ws = _WSConnection(url)
+    try:
+        sub_id = os.urandom(4).hex()
+        filt = {"authors": [pk_hex], "#t": ["nostr-pwd-backup"], "kinds": [1], "limit": 1}
+        req = json.dumps(["REQ", sub_id, filt])
+        logger.debug("Sending to %s: %s", url, req)
+        ws.send(req)
+        while True:
+            msg = ws.recv()
+            logger.debug("Received from %s: %s", url, msg)
+            data = json.loads(msg)
+            if data and data[0] == "EVENT" and data[1] == sub_id:
+                return data[2]
+            if data and data[0] == "EOSE" and data[1] == sub_id:
+                break
+    finally:
+        ws.close()
+    return None
+
+
 def backup_to_nostr(
     private_key_hex: str,
     data: Dict,
@@ -205,15 +314,13 @@ def backup_to_nostr(
     event = _create_event(sk_hex, pk_hex, content)
 
     if relay_urls:
-        logger.debug(
-            "Relay URLs provided (%s) but network publishing is not "
-            "implemented in this environment.",
-            relay_urls,
-        )
+        for url in relay_urls:
+            try:
+                _publish_event_to_relay(url, event)
+            except Exception as exc:
+                logger.debug("Failed to publish to %s: %s", url, exc)
 
-    # In this educational environment we simply append the event to a JSON
-    # file.  A full implementation would publish the event to the provided
-    # relay URLs using WebSockets.
+    # Always persist the event locally as a simple form of backup
     logger.debug("Writing event to %s", BACKUP_FILE)
     backups = []
     if BACKUP_FILE.exists():
@@ -232,19 +339,23 @@ def restore_from_nostr(
 
     _configure_debug_logging(debug)
 
+    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
+
     if relay_urls:
-        logger.debug(
-            "Relay URLs provided (%s) but network retrieval is not "
-            "implemented in this environment.",
-            relay_urls,
-        )
+        for url in relay_urls:
+            try:
+                event = _fetch_event_from_relay(url, pk_hex)
+            except Exception as exc:
+                logger.debug("Failed to fetch from %s: %s", url, exc)
+                event = None
+            if event:
+                decrypted = _decrypt_nip04(priv, event.get("content", ""))
+                return json.loads(decrypted)
 
     if not BACKUP_FILE.exists():
         raise FileNotFoundError("No backups available")
 
-    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
     logger.debug("Looking for events matching pubkey %s", pk_hex)
-
     backups = json.loads(BACKUP_FILE.read_text())
     for event in reversed(backups):
         if event.get("pubkey") == pk_hex:
