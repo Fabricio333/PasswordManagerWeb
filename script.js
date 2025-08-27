@@ -14,6 +14,14 @@ var nostrKeys = { nsec: "", npub: "" };
 const navigationHistory = ["welcomeScreen"];
 let currentScreenId = "welcomeScreen";
 
+// Debug logging flag
+const DEBUG = false;
+function debugLog(...args) {
+    if (DEBUG) {
+        console.log(...args);
+    }
+}
+
 // Update nonce UI from stored data when user or site changes
 userOrMailField.addEventListener("input", updateNonceFromLocalStorage);
 siteField.addEventListener("input", updateNonceFromLocalStorage);
@@ -126,7 +134,7 @@ async function verifyBip39SeedPhrase(seedPhrase, wordlist) {
     const wordCount = words.length;
 
     // Log the words for debugging
-    console.log('Words:', words);
+    debugLog('Words:', words);
 
     // Validate word count (12, 15, 18, 21, 24 are the only valid lengths)
     if (![12, 15, 18, 21, 24].includes(wordCount)) {
@@ -243,13 +251,13 @@ async function showPassword() {
         console.log(`Initialized nonce for site: ${siteField.value} with ui value ${nonceValue}`);
     }
 
-    console.log(localStoredData);
+    debugLog(localStoredData);
 
     /*
     prepare all the verification processes to ensure proper data input
     */
     const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonceValue;
-    console.log(concatenado)
+    debugLog(concatenado)
 
     const entropiaContraseña = hash(concatenado).substring(0, 16);
     passwordField.value = 'PASS' + entropiaContraseña + '249+';
@@ -487,7 +495,7 @@ function loadEncryptedData() {
             return;
         }
 
-        console.log('Encrypted data:', encryptedData);
+        debugLog('Encrypted data:', encryptedData);
 
         // Decrypt the data using the raw password
         const decryptedBytes = CryptoJS.AES.decrypt(encryptedData, password);
@@ -497,7 +505,7 @@ function loadEncryptedData() {
             throw new Error('Failed to decrypt data. Possibly malformed UTF-8.');
         }
 
-        console.log('Decrypted data:', decryptedData);
+        debugLog('Decrypted data:', decryptedData);
         localStoredData = JSON.parse(decryptedData)
         if(!localStoredData["privateKey"]){
             alert("There is no private key in the decrypted storage.")
@@ -546,8 +554,8 @@ function saveEncryptedData() {
     const existingData = loadDictionary("encryptedDataStorage") || {};
     existingData[key] = encrypted; // Save the encrypted data using the hashed password as the key
     saveDictionary("encryptedDataStorage", existingData); // Save back to localStorage
-    console.log('Data saved with hashed key:', key);
-    console.log('Data:', existingData[key]);
+    debugLog('Data saved with hashed key:', key);
+    debugLog('Data:', existingData[key]);
     alert("Data encrypted succesfully")
     refreshPage()
 }
