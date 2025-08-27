@@ -1,6 +1,10 @@
 import tkinter as tk
 from tkinter import messagebox
-from password_manager.seed import verify_seed_phrase, derive_keys
+from password_manager.seed import (
+    verify_seed_phrase,
+    derive_keys,
+    generate_seed_phrase,
+)
 from password_manager.password import generate_password
 from password_manager.nostr_utils import backup_to_nostr, restore_from_nostr
 
@@ -15,6 +19,7 @@ class PasswordManagerGUI(tk.Tk):
         tk.Label(self, text="Seed Phrase").pack()
         self.seed_entry = tk.Entry(self, width=50)
         self.seed_entry.pack(pady=5)
+        tk.Button(self, text="New Mnemonic", command=self.new_mnemonic).pack(pady=5)
         tk.Button(self, text="Verify Seed", command=self.verify_seed).pack(pady=5)
 
         # Username and site for password generation
@@ -91,6 +96,13 @@ class PasswordManagerGUI(tk.Tk):
         self.nonce_entry.insert(0, data.get("nonce", "0"))
         self.password_var.set(data.get("password", ""))
         messagebox.showinfo("Restore", "Backup restored")
+
+    def new_mnemonic(self):
+        phrase = generate_seed_phrase()
+        self.seed_entry.delete(0, tk.END)
+        self.seed_entry.insert(0, phrase)
+        self.keys = derive_keys(phrase)
+        messagebox.showinfo("Seed", "New seed phrase generated")
 
 
 if __name__ == "__main__":

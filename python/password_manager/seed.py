@@ -13,6 +13,7 @@ desktop application match those from the web version.
 
 from pathlib import Path
 import hashlib
+import os
 from typing import Dict, List
 
 WORDLIST_PATH = Path(__file__).resolve().parents[1] / "static" / "bip39_wordlist.txt"
@@ -28,6 +29,31 @@ def verify_seed_phrase(seed_phrase: str) -> bool:
     if len(words) not in {12, 15, 18, 21, 24}:
         return False
     return all(word in WORD_SET for word in words)
+
+
+def generate_seed_phrase(strength: int = 128) -> str:
+    """Generate a BIP-39 seed phrase using the local wordlist.
+
+    Args:
+        strength: Entropy strength in bits. Must be one of 128, 160, 192, 224, or 256.
+
+    Returns:
+        A space-separated mnemonic seed phrase.
+    """
+    if strength not in {128, 160, 192, 224, 256}:
+        raise ValueError("strength must be between 128 and 256 and divisible by 32")
+
+    entropy = os.urandom(strength // 8)
+    entropy_bits = "".join(f"{byte:08b}" for byte in entropy)
+
+    hash_bits = hashlib.sha256(entropy).hexdigest()
+    hash_bits = bin(int(hash_bits, 16))[2:].zfill(256)
+    checksum_length = strength // 32
+    checksum = hash_bits[:checksum_length]
+
+    bits = entropy_bits + checksum
+    words = [WORD_LIST[int(bits[i:i + 11], 2)] for i in range(0, len(bits), 11)]
+    return " ".join(words)
 
 
 def _words_to_indices(words: List[str]) -> str:
