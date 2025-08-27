@@ -1,4 +1,9 @@
-from password_manager.seed import verify_seed_phrase, derive_keys, derive_private_key
+from password_manager.seed import (
+    verify_seed_phrase,
+    derive_keys,
+    derive_private_key,
+    generate_seed_phrase,
+)
 from password_manager.password import generate_password
 
 VALID_PHRASE = (
@@ -25,3 +30,10 @@ def test_seed_to_password_matches_web():
     assert keys["private_key"] == derive_private_key(seed) == "3"
     pwd = generate_password(keys["private_key"], "user", "example.com", 1)
     assert pwd == "PASS92d74fdf59747e9a249+"
+
+
+def test_generate_seed_phrase():
+    phrase = generate_seed_phrase()
+    words = phrase.split()
+    assert len(words) == 12
+    assert verify_seed_phrase(phrase)
