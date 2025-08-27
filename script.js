@@ -18,6 +18,10 @@ let currentScreenId = "welcomeScreen";
 userOrMailField.addEventListener("input", updateNonceFromLocalStorage);
 siteField.addEventListener("input", updateNonceFromLocalStorage);
 
+/**
+ * Toggle visibility of the private key input field.
+ * @returns {void}
+ */
 function togglePrivateKeyVisibility() {
     const btn = document.getElementById("togglePrivateKeyBtn");
     if (privateKeyField.type === "password") {
@@ -29,6 +33,12 @@ function togglePrivateKeyVisibility() {
     }
 }
 
+/**
+ * Display a given screen and manage navigation history.
+ * @param {string} screenId - ID of the screen element to show.
+ * @param {boolean} [isBackNavigation=false] - Indicates if navigation is backward.
+ * @returns {void}
+ */
 function showScreen(screenId, isBackNavigation = false) {
     // Hide all screens
     document.querySelectorAll('.screen').forEach(screen => {
@@ -62,6 +72,11 @@ function showScreen(screenId, isBackNavigation = false) {
     console.log("Navigation History:", navigationHistory);
 }
 
+/**
+ * Navigate to the previous screen using the navigation history stack.
+ * @param {string} currentScreen - ID of the current screen.
+ * @returns {void}
+ */
 function navigateBack(currentScreen) {
     // Don't proceed if we're already at the welcome screen or history is empty
     if (navigationHistory.length <= 1) {
@@ -78,6 +93,11 @@ function navigateBack(currentScreen) {
     showScreen(previousScreen, true);
 }
 
+/**
+ * Convert a decimal string to its hexadecimal representation.
+ * @param {string} DecimalString - Decimal string to convert.
+ * @returns {string} Hexadecimal representation.
+ */
 function decimalStringToHex(DecimalString) {
     // Check if the input is a valid number
     if (!/^\d+$/.test(DecimalString)) {
@@ -88,6 +108,11 @@ function decimalStringToHex(DecimalString) {
     return hexadecimal;
 }
 
+/**
+ * Convert mnemonic words to their corresponding padded indices.
+ * @param {string} inputWords - Space-separated list of mnemonic words.
+ * @returns {string} Concatenated padded indices.
+ */
 function wordsToIndices(inputWords) {
     // Ensure inputWords is a string
     if (typeof inputWords !== "string") {
@@ -111,13 +136,13 @@ function wordsToIndices(inputWords) {
     }).join('');
 }
 
+/**
+ * Verify a BIP-39 seed phrase.
+ * @param {string} seedPhrase - Seed phrase to validate.
+ * @param {string[]} wordlist - BIP-39 wordlist for validation.
+ * @returns {Promise<boolean>} Resolves to true if valid, otherwise false.
+ */
 async function verifyBip39SeedPhrase(seedPhrase, wordlist) {
-    /**
-     * Verifies a BIP-39 seed phrase.
-     * @param {string} seedPhrase - The seed phrase input as a string of words.
-     * @param {string[]} wordlist - The BIP-39 wordlist to validate the words.
-     * @returns {Promise<boolean>} - A promise that resolves to true if the seed phrase is valid, false otherwise.
-     */
         // Normalize all whitespace characters (including non-breaking spaces, tabs, etc.) to standard spaces
     const normalizedSeedPhrase = seedPhrase.replace(/\s+/g, ' ').trim();
 
@@ -180,6 +205,11 @@ async function verifyBip39SeedPhrase(seedPhrase, wordlist) {
     console.log('Seed phrase is valid.');
     return true;
 }
+/**
+ * Verify the entered seed phrase and derive Nostr keys.
+ * @async
+ * @returns {Promise<void>} Resolves when navigation completes.
+ */
 async function verifySeedAndMoveNext() {
     try {
         const { nip19, getPublicKey } = window.NostrTools;
@@ -217,11 +247,21 @@ async function verifySeedAndMoveNext() {
 }
 
 
+/**
+ * Generate a SHA-256 hash for a given string.
+ * @param {string} text - Text to hash.
+ * @returns {string} Hex-encoded hash.
+ */
 function hash(text) {
     return CryptoJS.SHA256(text).toString();
 
 }
 
+/**
+ * Derive and display a deterministic password based on user, site, and nonce.
+ * @async
+ * @returns {Promise<void>} Resolves after password is shown and nonce stored.
+ */
 async function showPassword() {
     if (!localStoredData["users"]) {
         localStoredData["users"] = {};
@@ -249,20 +289,28 @@ async function showPassword() {
     prepare all the verification processes to ensure proper data input
     */
     const concatenado = privateKeyField.value + "/" + userOrMailField.value + "/" + siteField.value + "/" + nonceValue;
-    console.log(concatenado)
-
+    // Derive password entropy by hashing key, user, site, and nonce together
     const entropiaContraseña = hash(concatenado).substring(0, 16);
     passwordField.value = 'PASS' + entropiaContraseña + '249+';
-    // Persist the nonce used to generate the password
+    // Persist the nonce used to generate the password for reproducibility
     localStoredData["users"][userOrMailField.value][siteField.value] = nonceValue;
 }
 
+/**
+ * Generate a valid BIP-39 mnemonic and corresponding private key.
+ * @returns {void}
+ */
 function generateValidMnemonic() {
     if (words.length !== 2048) {
         throw new Error("The wordlist must contain exactly 2048 words.");
     }
 
     // Step 1: Generate cryptographically secure random entropy
+    /**
+     * Generate secure random bytes for entropy.
+     * @param {number} [bytes=16] - Number of bytes to generate.
+     * @returns {Uint8Array} Random entropy bytes.
+     */
     function generateEntropy(bytes = 16) {
         if (window.crypto && window.crypto.getRandomValues) {
             const entropy = new Uint8Array(bytes);
@@ -274,6 +322,11 @@ function generateValidMnemonic() {
     }
 
     // Step 2: Convert entropy to binary string
+    /**
+     * Convert entropy bytes to a binary string.
+     * @param {Uint8Array} entropy - Entropy bytes.
+     * @returns {string} Binary representation.
+     */
     function entropyToBinary(entropy) {
         return Array.from(entropy)
             .map(byte => byte.toString(2).padStart(8, "0"))
@@ -281,6 +334,12 @@ function generateValidMnemonic() {
     }
 
     // Step 3: Generate checksum (Fixed to handle async digest)
+    /**
+     * Generate checksum bits for the given entropy.
+     * @async
+     * @param {Uint8Array} entropy - Entropy bytes.
+     * @returns {Promise<string>} Binary checksum string.
+     */
     async function generateChecksum(entropy) {
         const hashBuffer = await window.crypto.subtle.digest("SHA-256", entropy);
         const hashArray = new Uint8Array(hashBuffer);
@@ -292,6 +351,12 @@ function generateValidMnemonic() {
     }
 
     // Step 4: Convert binary to mnemonic words
+    /**
+     * Convert a binary string into mnemonic words using the wordlist.
+     * @param {string} binary - Binary string of entropy + checksum.
+     * @param {string[]} wordlist - BIP-39 wordlist.
+     * @returns {string} Space-separated mnemonic words.
+     */
     function binaryToMnemonic(binary, wordlist) {
         const words = [];
         for (let i = 0; i < binary.length; i += 11) {
@@ -316,6 +381,10 @@ function generateValidMnemonic() {
 
 }
 
+/**
+ * Update the nonce field using stored data for the current user and site.
+ * @returns {void}
+ */
 function updateNonceFromLocalStorage() {
     const userOrMail = userOrMailField.value;
     const site = siteField.value;
@@ -326,9 +395,14 @@ function updateNonceFromLocalStorage() {
     }
 
     const nonce = localStoredData?.users?.[userOrMail]?.[site];
+    // Populate field with stored nonce or default to 0 if none exists
     nonceField.value = (nonce !== undefined) ? nonce : 0;
 }
 
+/**
+ * Increment and display the nonce for the current user-site pair.
+ * @returns {void}
+ */
 function incrementSiteNonce() {
     const userOrMail = userOrMailField.value;
     const site = siteField.value;
@@ -338,9 +412,14 @@ function incrementSiteNonce() {
     }
     let nonce = parseInt(nonceField.value, 10) || 0;
     nonce++;
+    // Update UI with new nonce value
     nonceField.value = nonce;
 }
 
+/**
+ * Decrement the nonce for the current user-site pair if greater than zero.
+ * @returns {void}
+ */
 function decrementSiteNonce() {
     const userOrMail = userOrMailField.value;
     const site = siteField.value;
@@ -351,10 +430,17 @@ function decrementSiteNonce() {
     let nonce = parseInt(nonceField.value, 10) || 0;
     if (nonce > 0) {
         nonce--;
+        // Update UI after decrementing nonce
         nonceField.value = nonce;
     }
 }
 
+/**
+ * Generate a list of unique random indices.
+ * @param {number} max - Upper bound (exclusive) for index generation.
+ * @param {number} count - Number of unique indices to return.
+ * @returns {number[]} Array of unique random indices.
+ */
 function getRandomIndices(max, count) {
     const indices = new Set();
     while (indices.size < count) {
@@ -363,6 +449,10 @@ function getRandomIndices(max, count) {
     return Array.from(indices);
 }
 
+/**
+ * Prepare the seed phrase verification screen with random prompts.
+ * @returns {void}
+ */
 function setupVerificationScreen() {
     const wordPrompts = document.getElementById("wordPrompts");
     wordPrompts.innerHTML = "";
@@ -385,6 +475,10 @@ function setupVerificationScreen() {
     });
 }
 
+/**
+ * Verify user-entered words against the generated seed phrase.
+ * @returns {void}
+ */
 function verifySeedPhrase() {
     const newSeedPhraseField = document.getElementById("newSeedPhraseField");
     const words = newSeedPhraseField.value.trim().split(/\s+/);
@@ -425,6 +519,10 @@ function verifySeedPhrase() {
     }
 }
 
+/**
+ * Clear sensitive data and navigate to the management screen.
+ * @returns {void}
+ */
 function moveToManagementScreen() {
     // Clear sensitive seed phrase data from the DOM
     document.getElementById("newSeedPhraseField").value = "";
@@ -432,6 +530,11 @@ function moveToManagementScreen() {
     showScreen("managementScreen");
 }
 
+/**
+ * Copy the value of an input element to the clipboard.
+ * @param {string} element - ID of the input element to copy.
+ * @returns {boolean|void} False if empty selection, otherwise void.
+ */
 function copyElementToClipboard(element) {
     var outputText = document.getElementById(element);
     if (outputText && !outputText.value.trim()) { // Check if selected text is empty or null
@@ -447,6 +550,11 @@ function copyElementToClipboard(element) {
         });
 }
 
+/**
+ * Load a JSON dictionary from localStorage.
+ * @param {string} key - Storage key to retrieve.
+ * @returns {Object} Parsed object or empty object if not found.
+ */
 function loadDictionary(key) {
     // Check if the key exists in localStorage
     const storedData = localStorage.getItem(key);
@@ -458,12 +566,22 @@ function loadDictionary(key) {
     }
 }
 
+/**
+ * Save a dictionary object to localStorage.
+ * @param {string} key - Storage key to use.
+ * @param {Object} dictionary - Data to save.
+ * @returns {void}
+ */
 function saveDictionary(key, dictionary) {
     // Convert the dictionary to a JSON string and save it in localStorage
     localStorage.setItem(key, JSON.stringify(dictionary));
     console.log('Dict Saved')
 }
 
+/**
+ * Load and decrypt data from localStorage using a user-provided password.
+ * @returns {Object|void} Decrypted data object or void on failure.
+ */
 function loadEncryptedData() {
     const passwordInput = document.getElementById('encryptionPassword');
     const password = passwordInput.value.trim();
@@ -515,6 +633,10 @@ function loadEncryptedData() {
     }
 }
 
+/**
+ * Encrypt and store current data using a user-provided password.
+ * @returns {void}
+ */
 function saveEncryptedData() {
     const password1 = document.getElementById('encryptPass1').value;
     const password2 = document.getElementById('encryptPass2').value;
@@ -552,17 +674,29 @@ function saveEncryptedData() {
     refreshPage()
 }
 
+/**
+ * Reload the current page.
+ * @returns {void}
+ */
 function refreshPage() {
     location.reload();
 }
 
 // ------ Nonce Editing Utilities ------
+/**
+ * Open the nonce editor populated with stored user nonces.
+ * @returns {void}
+ */
 function openEditNonces() {
     if (!localStoredData['users']) localStoredData['users'] = {};
     document.getElementById('noncesEditor').value = JSON.stringify(localStoredData['users'], null, 2);
     showScreen('editNoncesScreen');
 }
 
+/**
+ * Save nonce values edited by the user.
+ * @returns {void}
+ */
 function saveEditedNonces() {
     try {
         const data = JSON.parse(document.getElementById('noncesEditor').value);
@@ -574,6 +708,10 @@ function saveEditedNonces() {
     }
 }
 
+/**
+ * Download all stored nonces as a JSON file.
+ * @returns {void}
+ */
 function downloadNoncesJson() {
     const data = localStoredData['users'] || {};
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -587,6 +725,11 @@ function downloadNoncesJson() {
     URL.revokeObjectURL(url);
 }
 
+/**
+ * Backup encrypted data to configured NOSTR relays.
+ * @async
+ * @returns {Promise<void>} Resolves when backup attempts complete.
+ */
 window.backupToNostr = async function () {
     const { nip04, relayInit, getEventHash, signEvent, getPublicKey } = window.NostrTools;
 
@@ -711,6 +854,11 @@ window.backupToNostr = async function () {
     }
 };
 
+/**
+ * Restore encrypted data from NOSTR relays.
+ * @async
+ * @returns {Promise<void>} Resolves when restore process finishes.
+ */
 window.restoreFromNostr = async function () {
     const { nip04, relayInit, getPublicKey } = window.NostrTools;
 
@@ -830,6 +978,11 @@ window.restoreFromNostr = async function () {
     }
 };
 
+/**
+ * Display backup events found on configured NOSTR relays.
+ * @async
+ * @returns {Promise<void>} Resolves when history is displayed.
+ */
 window.openNostrHistory = async function () {
     const { relayInit, getPublicKey } = window.NostrTools;
 
@@ -972,6 +1125,12 @@ window.openNostrHistory = async function () {
     }
 };
 
+/**
+ * Restore encrypted data from a specific NOSTR event ID.
+ * @async
+ * @param {string} eventId - Identifier of the NOSTR event to restore.
+ * @returns {Promise<void>} Resolves when restore completes.
+ */
 window.restoreFromNostrId = async function (eventId) {
     const { nip04, relayInit } = window.NostrTools;
 
