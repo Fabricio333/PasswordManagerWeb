@@ -14,6 +14,7 @@ desktop application match those from the web version.
 from pathlib import Path
 import hashlib
 from typing import Dict, List
+from cryptography.hazmat.primitives.asymmetric import ec
 
 WORDLIST_PATH = Path(__file__).resolve().parents[1] / "static" / "bip39_wordlist.txt"
 with open(WORDLIST_PATH, "r", encoding="utf-8") as f:
@@ -54,7 +55,10 @@ def derive_private_key(seed_phrase: str) -> str:
 
 
 def derive_npub_from_nsec(nsec_hex: str) -> str:
-    return hashlib.sha256(nsec_hex.encode()).hexdigest()
+    """Derive the Nostr public key (hex) from the ``nsec`` secret."""
+    sk = ec.derive_private_key(int(nsec_hex, 16), ec.SECP256K1())
+    pk_numbers = sk.public_key().public_numbers()
+    return f"{pk_numbers.x:064x}"
 
 
 def derive_keys(seed_phrase: str) -> dict:
