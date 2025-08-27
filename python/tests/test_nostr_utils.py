@@ -95,9 +95,9 @@ def _recv_frame(conn) -> str:
     return unmasked.decode()
 
 
-def _start_relay_server(stop_event, store):
+def _start_relay_server(stop_event, store, port=8765):
     server = socket.socket()
-    server.bind(("localhost", 8765))
+    server.bind(("localhost", port))
     server.listen(5)
     store.setdefault("events", [])
 
@@ -144,13 +144,13 @@ def test_network_backup_and_restore(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     stop = threading.Event()
     store = {}
-    thread = threading.Thread(target=_start_relay_server, args=(stop, store))
+    thread = threading.Thread(target=_start_relay_server, args=(stop, store, 8768))
     thread.start()
     time.sleep(0.1)
     try:
         key = "cafebabe"
         data = {"hello": "world"}
-        relay_url = "ws://localhost:8765"
+        relay_url = "ws://localhost:8768"
         backup_to_nostr(key, data, relay_urls=[relay_url], debug=True)
         assert store["events"]
         temp_file.unlink()  # ensure restore pulls from relay
@@ -169,12 +169,12 @@ def test_network_history(tmp_path, monkeypatch):
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     stop = threading.Event()
     store = {}
-    thread = threading.Thread(target=_start_relay_server, args=(stop, store))
+    thread = threading.Thread(target=_start_relay_server, args=(stop, store, 8769))
     thread.start()
     time.sleep(0.1)
     try:
         key = "cafebabe"
-        relay_url = "ws://localhost:8765"
+        relay_url = "ws://localhost:8769"
         backup_to_nostr(key, {"n": 1}, relay_urls=[relay_url], debug=True)
         backup_to_nostr(key, {"n": 2}, relay_urls=[relay_url], debug=True)
         temp_file.unlink()
@@ -185,3 +185,38 @@ def test_network_history(tmp_path, monkeypatch):
     finally:
         stop.set()
         thread.join()
+
+
+def test_connection_logging_success(tmp_path, monkeypatch, caplog):
+    temp_file = tmp_path / "backups.json"
+    monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
+    stop = threading.Event()
+    store = {}
+    thread = threading.Thread(target=_start_relay_server, args=(stop, store, 8770))
+    thread.start()
+    time.sleep(0.1)
+    try:
+        key = "facefeed"
+        relay_url = "ws://localhost:8770"
+        with caplog.at_level("DEBUG"):
+            backup_to_nostr(key, {"n": 1}, relay_urls=[relay_url], debug=True)
+        assert any(
+            f"WebSocket connection to {relay_url} established" in rec.message
+            for rec in caplog.records
+        )
+    finally:
+        stop.set()
+        thread.join()
+
+
+def test_connection_logging_failure(tmp_path, monkeypatch, caplog):
+    temp_file = tmp_path / "backups.json"
+    monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
+    key = "facefeed"
+    relay_url = "ws://localhost:8766"  # nothing listening
+    with caplog.at_level("DEBUG"):
+        backup_to_nostr(key, {"n": 1}, relay_urls=[relay_url], debug=True)
+    assert any(
+        f"WebSocket connection to {relay_url} failed" in rec.message
+        for rec in caplog.records
+    )

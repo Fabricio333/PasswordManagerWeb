@@ -182,23 +182,29 @@ class _WSConnection:
         host = parsed.hostname
         port = parsed.port or (443 if parsed.scheme == "wss" else 80)
         path = parsed.path or "/"
-        raw = socket.create_connection((host, port))
-        if parsed.scheme == "wss":
-            context = ssl.create_default_context()
-            self.sock = context.wrap_socket(raw, server_hostname=host)
-        else:
-            self.sock = raw
-        key = base64.b64encode(os.urandom(16)).decode()
-        headers = (
-            f"GET {path} HTTP/1.1\r\n"
-            f"Host: {host}:{port}\r\n"
-            "Upgrade: websocket\r\n"
-            "Connection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\n"
-            "Sec-WebSocket-Version: 13\r\n\r\n"
-        )
-        self.sock.sendall(headers.encode())
-        self._recv_http_response()
+        logger.debug("WebSocket connection to %s opening", url)
+        try:
+            raw = socket.create_connection((host, port), timeout=5)
+            if parsed.scheme == "wss":
+                context = ssl.create_default_context()
+                self.sock = context.wrap_socket(raw, server_hostname=host)
+            else:
+                self.sock = raw
+            key = base64.b64encode(os.urandom(16)).decode()
+            headers = (
+                f"GET {path} HTTP/1.1\r\n"
+                f"Host: {host}:{port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\n"
+                "Sec-WebSocket-Version: 13\r\n\r\n"
+            )
+            self.sock.sendall(headers.encode())
+            self._recv_http_response()
+            logger.debug("WebSocket connection to %s established", url)
+        except Exception as exc:
+            logger.debug("WebSocket connection to %s failed: %s", url, exc)
+            raise
 
     def _recv_http_response(self) -> None:
         data = b""
