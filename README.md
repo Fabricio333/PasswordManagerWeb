@@ -1,7 +1,10 @@
 # Password Manager v2
 A deterministic password vault with optional Nostr cloud backups.
 
+For a deeper technical overview, see [How It Works](docs/how-it-works.md).
+
 ## Table of Contents
+- [How It Works](docs/how-it-works.md)
 - [Introduction](#introduction)
 - [Why Use This Password Manager?](#why-use-this-password-manager)
 - [Getting Started](#getting-started)
