@@ -48,6 +48,14 @@ def _configure_debug_logging(debug: bool) -> None:
 # File used to store simulated Nostr backup events
 BACKUP_FILE = Path(__file__).resolve().parent / "nostr_backups.json"
 
+# Default relay list mirroring the web application
+DEFAULT_RELAY_URLS = [
+    "wss://relay.damus.io",
+    "wss://nostr-pub.wellorder.net",
+    "wss://relay.snort.social",
+    "wss://nos.lol",
+]
+
 # Order of the secp256k1 curve used for Schnorr signing
 SECP256K1_N = int(
     "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16
@@ -182,7 +190,7 @@ class _WSConnection:
         host = parsed.hostname
         port = parsed.port or (443 if parsed.scheme == "wss" else 80)
         path = parsed.path or "/"
-        logger.debug("WebSocket connection to %s opening", url)
+        logger.info("WebSocket connection to %s opening", url)
         try:
             raw = socket.create_connection((host, port), timeout=5)
             if parsed.scheme == "wss":
@@ -201,9 +209,9 @@ class _WSConnection:
             )
             self.sock.sendall(headers.encode())
             self._recv_http_response()
-            logger.debug("WebSocket connection to %s established", url)
+            logger.info("WebSocket connection to %s established", url)
         except Exception as exc:
-            logger.debug("WebSocket connection to %s failed: %s", url, exc)
+            logger.warning("WebSocket connection to %s failed: %s", url, exc)
             raise
 
     def _recv_http_response(self) -> None:
@@ -251,7 +259,7 @@ class _WSConnection:
 
 def _publish_event_to_relay(url: str, event: Dict) -> None:
     """Publish ``event`` to the relay at ``url`` using WebSockets."""
-    logger.debug("Connecting to relay %s", url)
+    logger.info("Connecting to relay %s", url)
     ws = _WSConnection(url)
     try:
         msg = json.dumps(["EVENT", event])
@@ -265,7 +273,7 @@ def _publish_event_to_relay(url: str, event: Dict) -> None:
 
 def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
     """Fetch the most recent backup event for ``pk_hex`` from ``url``."""
-    logger.debug("Connecting to relay %s", url)
+    logger.info("Connecting to relay %s", url)
     ws = _WSConnection(url)
     try:
         sub_id = os.urandom(4).hex()
@@ -288,7 +296,7 @@ def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
 
 def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50) -> List[Dict]:
     """Fetch up to ``limit`` backup events for ``pk_hex`` from ``url``."""
-    logger.debug("Connecting to relay %s", url)
+    logger.info("Connecting to relay %s", url)
     ws = _WSConnection(url)
     events: List[Dict] = []
     try:
@@ -330,8 +338,8 @@ def backup_to_nostr(
     data:
         Arbitrary JSON‑serialisable dictionary to back up.
     relay_urls:
-        Placeholder for real relay URLs.  When ``None`` (the default) the
-        backup is stored locally.
+        When ``None`` the default public relays are contacted.  Use an empty
+        list to disable network access and store the backup only locally.
     debug:
         When ``True`` debug information is logged using :mod:`logging`.
 
@@ -348,12 +356,15 @@ def backup_to_nostr(
     content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True))
     event = _create_event(sk_hex, pk_hex, content)
 
+    if relay_urls is None:
+        relay_urls = DEFAULT_RELAY_URLS
+
     if relay_urls:
         for url in relay_urls:
             try:
                 _publish_event_to_relay(url, event)
             except Exception as exc:
-                logger.debug("Failed to publish to %s: %s", url, exc)
+                logger.warning("Failed to publish to %s: %s", url, exc)
 
     # Always persist the event locally as a simple form of backup
     logger.debug("Writing event to %s", BACKUP_FILE)
@@ -376,12 +387,15 @@ def restore_from_nostr(
 
     sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
 
+    if relay_urls is None:
+        relay_urls = DEFAULT_RELAY_URLS
+
     if relay_urls:
         for url in relay_urls:
             try:
                 event = _fetch_event_from_relay(url, pk_hex)
             except Exception as exc:
-                logger.debug("Failed to fetch from %s: %s", url, exc)
+                logger.warning("Failed to fetch from %s: %s", url, exc)
                 event = None
             if event:
                 decrypted = _decrypt_nip04(priv, event.get("content", ""))
@@ -412,13 +426,16 @@ def restore_history_from_nostr(
 
     sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
 
+    if relay_urls is None:
+        relay_urls = DEFAULT_RELAY_URLS
+
     events: List[Dict] = []
     if relay_urls:
         for url in relay_urls:
             try:
                 events.extend(_fetch_history_from_relay(url, pk_hex, limit))
             except Exception as exc:
-                logger.debug("Failed to fetch history from %s: %s", url, exc)
+                logger.warning("Failed to fetch history from %s: %s", url, exc)
     elif BACKUP_FILE.exists():
         backups = json.loads(BACKUP_FILE.read_text())
         events = [e for e in backups if e.get("pubkey") == pk_hex]

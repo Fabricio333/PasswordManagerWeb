@@ -19,7 +19,7 @@ def test_backup_and_restore(tmp_path, monkeypatch):
     key = "deadbeef"
     data = {"foo": "bar"}
 
-    event_id = backup_to_nostr(key, data, debug=True)
+    event_id = backup_to_nostr(key, data, relay_urls=[], debug=True)
     assert temp_file.exists()
     assert isinstance(event_id, str)
 
@@ -27,7 +27,7 @@ def test_backup_and_restore(tmp_path, monkeypatch):
     stored = json.loads(temp_file.read_text())[-1]
     assert stored["content"] != json.dumps(data, sort_keys=True)
 
-    restored = restore_from_nostr(key, debug=True)
+    restored = restore_from_nostr(key, relay_urls=[], debug=True)
     assert restored == data
 
 
@@ -44,7 +44,7 @@ def test_debug_logging(tmp_path, monkeypatch, capsys):
     root.handlers = [handler]
     root.setLevel(logging.WARNING)
 
-    backup_to_nostr("deadbeef", {"foo": "bar"}, debug=True)
+    backup_to_nostr("deadbeef", {"foo": "bar"}, relay_urls=[], debug=True)
 
     captured = capsys.readouterr()
     assert "Deriving Nostr keys" in captured.err or captured.out
@@ -54,10 +54,10 @@ def test_restore_history(tmp_path, monkeypatch):
     temp_file = tmp_path / "backups.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     key = "deadbeef"
-    backup_to_nostr(key, {"foo": 1}, debug=True)
+    backup_to_nostr(key, {"foo": 1}, relay_urls=[], debug=True)
     time.sleep(0.1)
-    backup_to_nostr(key, {"foo": 2}, debug=True)
-    history = restore_history_from_nostr(key, debug=True)
+    backup_to_nostr(key, {"foo": 2}, relay_urls=[], debug=True)
+    history = restore_history_from_nostr(key, relay_urls=[], debug=True)
     assert [h["foo"] for h in history] == [1, 2]
 
 
