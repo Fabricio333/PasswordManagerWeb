@@ -14,8 +14,13 @@ desktop application match those from the web version.
 from pathlib import Path
 import hashlib
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
 from cryptography.hazmat.primitives.asymmetric import ec
+
+try:  # pragma: no cover - optional dependency
+    from nostr.key import PrivateKey as NostrPrivateKey
+except Exception:  # pragma: no cover - library may not be installed
+    NostrPrivateKey = None  # type: ignore
 
 WORDLIST_PATH = Path(__file__).resolve().parents[1] / "static" / "bip39_wordlist.txt"
 with open(WORDLIST_PATH, "r", encoding="utf-8") as f:
@@ -88,7 +93,23 @@ def derive_npub_from_nsec(nsec_hex: str) -> str:
 
 
 def derive_keys(seed_phrase: str) -> dict:
+    """Return key material matching the web implementation.
+
+    The returned dictionary contains the web private key, the derived
+    ``nsec`` secret, the corresponding ``npub`` public key and, when the
+    optional :mod:`python-nostr` library is available, an instantiated
+    :class:`nostr.key.PrivateKey` object for high level operations.
+    """
+
     private_key = derive_private_key(seed_phrase)
     nsec = hashlib.sha256(private_key.encode()).hexdigest()
     npub = derive_npub_from_nsec(nsec)
-    return {"private_key": private_key, "nsec": nsec, "npub": npub}
+    nostr_priv: Optional[NostrPrivateKey] = (
+        NostrPrivateKey.from_hex(nsec) if NostrPrivateKey else None
+    )
+    return {
+        "private_key": private_key,
+        "nsec": nsec,
+        "npub": npub,
+        "nostr_private": nostr_priv,
+    }

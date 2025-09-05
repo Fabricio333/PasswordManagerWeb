@@ -16,8 +16,9 @@ from password_manager.nostr_utils import (
 
 
 class PasswordManagerGUI(tk.Tk):
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         super().__init__()
+        self.debug = debug
         self.title("SecureVault Manager")
         # Original interface was 400x400 which became cramped as new
         # functionality was added. Increase the height to provide more space
@@ -107,7 +108,7 @@ class PasswordManagerGUI(tk.Tk):
             "password": self.password_var.get(),
         }
         event_id = backup_to_nostr(
-            self.keys["private_key"], data, relay_urls=relay_urls, debug=True
+            self.keys["private_key"], data, relay_urls=relay_urls, debug=self.debug
         )
         messagebox.showinfo("Backup", f"Backup stored with id {event_id}")
 
@@ -118,7 +119,7 @@ class PasswordManagerGUI(tk.Tk):
         relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
         try:
             data = restore_from_nostr(
-                self.keys["private_key"], relay_urls=relay_urls, debug=True
+                self.keys["private_key"], relay_urls=relay_urls, debug=self.debug
             )
         except Exception as exc:
             messagebox.showerror("Restore", str(exc))
@@ -138,7 +139,7 @@ class PasswordManagerGUI(tk.Tk):
             return
         relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
         history = restore_history_from_nostr(
-            self.keys["private_key"], relay_urls=relay_urls, debug=True
+            self.keys["private_key"], relay_urls=relay_urls, debug=self.debug
         )
         win = tk.Toplevel(self)
         win.title("Nostr History")

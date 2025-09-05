@@ -26,6 +26,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .seed import derive_npub_from_nsec
+
 # ``python-nostr`` provides higher level helpers for creating and signing
 # Nostr events.  The library is optional so the application can still run in
 # restricted environments (such as the execution sandbox used for the
@@ -128,8 +130,7 @@ def _derive_keypair(
     # ``python-nostr`` (when available) is leveraged for convenience methods
     # like event signing and NIP‑04 helpers.
     priv = ec.derive_private_key(int(sk_hex, 16), ec.SECP256K1())
-    pk_numbers = priv.public_key().public_numbers()
-    pk_hex = f"{pk_numbers.x:064x}"
+    pk_hex = derive_npub_from_nsec(sk_hex)
 
     nostr_priv = NostrPrivateKey.from_hex(sk_hex) if NostrPrivateKey else None
 
