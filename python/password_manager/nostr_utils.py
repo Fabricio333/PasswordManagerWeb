@@ -26,6 +26,20 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+# ``python-nostr`` provides higher level helpers for creating and signing
+# Nostr events.  The library is optional so the application can still run in
+# restricted environments (such as the execution sandbox used for the
+# exercises) where installing third party packages or opening network
+# connections might not be possible.  When the library is available we use it
+# for event construction and signing which keeps this module aligned with real
+# world implementations.
+try:  # pragma: no cover - optional dependency
+    from nostr.key import PrivateKey as NostrPrivateKey
+    from nostr.event import Event as NostrEvent
+except Exception:  # pragma: no cover - the library is not installed
+    NostrPrivateKey = None  # type: ignore
+    NostrEvent = None  # type: ignore
+
 
 logger = logging.getLogger(__name__)
 
@@ -102,20 +116,43 @@ def _schnorr_sign(sk_hex: str, msg32: bytes) -> str:
     return sig.hex()
 
 
-def _derive_keypair(private_key_hex: str) -> (str, str, ec.EllipticCurvePrivateKey):
+def _derive_keypair(
+    private_key_hex: str,
+) -> (str, str, ec.EllipticCurvePrivateKey, Optional[NostrPrivateKey]):
     """Derive the Nostr key pair from the web compatible ``private_key_hex``."""
+
     logger.debug("Deriving Nostr keys from private key hex")
     sk_hex = hashlib.sha256(private_key_hex.encode()).hexdigest()
+
+    # ``cryptography`` is used for the low level primitives such as ECDH while
+    # ``python-nostr`` (when available) is leveraged for convenience methods
+    # like event signing and NIP‑04 helpers.
     priv = ec.derive_private_key(int(sk_hex, 16), ec.SECP256K1())
     pk_numbers = priv.public_key().public_numbers()
     pk_hex = f"{pk_numbers.x:064x}"
+
+    nostr_priv = NostrPrivateKey.from_hex(sk_hex) if NostrPrivateKey else None
+
     logger.debug("Derived sk=%s, pk=%s", sk_hex, pk_hex)
-    return sk_hex, pk_hex, priv
+    return sk_hex, pk_hex, priv, nostr_priv
 
 
-def _encrypt_nip04(priv: ec.EllipticCurvePrivateKey, plaintext: str) -> str:
+def _encrypt_nip04(
+    priv: ec.EllipticCurvePrivateKey,
+    plaintext: str,
+    nostr_priv: Optional[NostrPrivateKey] = None,
+) -> str:
     """Encrypt ``plaintext`` using NIP‑04 (self‑encryption)."""
+
     logger.debug("Encrypting data via NIP‑04")
+
+    # If the high level ``python-nostr`` helper is available use it for the
+    # actual cryptography.  This mirrors what a real client would do.  When the
+    # dependency is missing we fall back to a small local implementation so the
+    # educational version keeps working.
+    if nostr_priv and hasattr(nostr_priv, "encrypt_message"):
+        return nostr_priv.encrypt_message(nostr_priv.public_key.hex(), plaintext)
+
     shared = priv.exchange(ec.ECDH(), priv.public_key())
     key = hashlib.sha256(shared).digest()
     iv = os.urandom(16)
@@ -127,9 +164,18 @@ def _encrypt_nip04(priv: ec.EllipticCurvePrivateKey, plaintext: str) -> str:
     return f"{base64.b64encode(ct).decode()}?iv={base64.b64encode(iv).decode()}"
 
 
-def _decrypt_nip04(priv: ec.EllipticCurvePrivateKey, ciphertext: str) -> str:
+def _decrypt_nip04(
+    priv: ec.EllipticCurvePrivateKey,
+    ciphertext: str,
+    nostr_priv: Optional[NostrPrivateKey] = None,
+) -> str:
     """Decrypt a NIP‑04 payload produced by :func:`_encrypt_nip04`."""
+
     logger.debug("Decrypting NIP‑04 payload")
+
+    if nostr_priv and hasattr(nostr_priv, "decrypt_message"):
+        return nostr_priv.decrypt_message(nostr_priv.public_key.hex(), ciphertext)
+
     try:
         data, iv_b64 = ciphertext.split("?iv=")
     except ValueError as exc:
@@ -147,9 +193,29 @@ def _decrypt_nip04(priv: ec.EllipticCurvePrivateKey, ciphertext: str) -> str:
     return plaintext.decode()
 
 
-def _create_event(sk_hex: str, pk_hex: str, content: str) -> Dict:
+def _create_event(
+    sk_hex: str,
+    pk_hex: str,
+    content: str,
+    nostr_priv: Optional[NostrPrivateKey] = None,
+) -> Dict:
     """Create a Nostr style event signed with ``sk_hex``."""
+
     logger.debug("Creating event for content: %s", content)
+
+    # Prefer the higher level ``python-nostr`` implementation when possible.
+    if nostr_priv and NostrEvent is not None:
+        ev = NostrEvent(
+            content=content,
+            kind=1,
+            tags=[["t", "nostr-pwd-backup"]],
+        )
+        nostr_priv.sign_event(ev)
+        nostr_event = json.loads(ev.to_json())
+        logger.debug("Created event via python-nostr: %s", nostr_event)
+        return nostr_event
+
+    # Fallback to a local implementation that manually performs the signing.
     event = [
         0,
         pk_hex,
@@ -344,9 +410,9 @@ def backup_to_nostr(
 
     _configure_debug_logging(debug)
 
-    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
-    content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True))
-    event = _create_event(sk_hex, pk_hex, content)
+    sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
+    content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True), nostr_priv)
+    event = _create_event(sk_hex, pk_hex, content, nostr_priv)
 
     if relay_urls:
         for url in relay_urls:
@@ -374,7 +440,7 @@ def restore_from_nostr(
 
     _configure_debug_logging(debug)
 
-    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
+    sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
     if relay_urls:
         for url in relay_urls:
@@ -384,7 +450,7 @@ def restore_from_nostr(
                 logger.debug("Failed to fetch from %s: %s", url, exc)
                 event = None
             if event:
-                decrypted = _decrypt_nip04(priv, event.get("content", ""))
+                decrypted = _decrypt_nip04(priv, event.get("content", ""), nostr_priv)
                 return json.loads(decrypted)
 
     if not BACKUP_FILE.exists():
@@ -395,7 +461,7 @@ def restore_from_nostr(
     for event in reversed(backups):
         if event.get("pubkey") == pk_hex:
             logger.debug("Found matching event: %s", event)
-            decrypted = _decrypt_nip04(priv, event.get("content", ""))
+            decrypted = _decrypt_nip04(priv, event.get("content", ""), nostr_priv)
             return json.loads(decrypted)
     raise ValueError("No backup found for provided key")
 
@@ -410,7 +476,7 @@ def restore_history_from_nostr(
 
     _configure_debug_logging(debug)
 
-    sk_hex, pk_hex, priv = _derive_keypair(private_key_hex)
+    sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
     events: List[Dict] = []
     if relay_urls:
@@ -426,7 +492,7 @@ def restore_history_from_nostr(
     history: List[Dict] = []
     for event in events:
         try:
-            decrypted = _decrypt_nip04(priv, event.get("content", ""))
+            decrypted = _decrypt_nip04(priv, event.get("content", ""), nostr_priv)
             item = json.loads(decrypted)
             item["event_id"] = event.get("id")
             history.append(item)
