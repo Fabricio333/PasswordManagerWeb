@@ -88,29 +88,22 @@ def _configure_debug_logging(debug: bool) -> None:
 
     logger.setLevel(logging.DEBUG)
 
-    # If the application has not configured any root handlers, set up a simple
-    # console handler there for completeness.
-    if not root_logger.handlers:
+    # Ensure the root logger has at least one ``StreamHandler`` so records are
+    # visible to users. If one is already present we rely on it exclusively to
+    # avoid duplicated log lines.
+    if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
         root_handler = logging.StreamHandler()
-        root_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+        root_handler.setFormatter(
+            logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+        )
         root_logger.addHandler(root_handler)
 
-    # Ensure this module always has a stream handler pointing at the current
-    # ``sys.stderr``. Replace any existing handler to avoid stale references to
-    # pre-captured streams when tests use ``capsys``.
-    stream_handler = None
+    # Remove any stream handlers directly attached to this module's logger so
+    # that only the root logger emits records.
     for h in list(logger.handlers):
         if isinstance(h, logging.StreamHandler):
-            stream_handler = h
-            break
-    if stream_handler is None:
-        stream_handler = logging.StreamHandler()
-        logger.addHandler(stream_handler)
-    stream_handler.setLevel(logging.DEBUG)
-    stream_handler.setFormatter(
-        logging.Formatter("%(levelname)s:%(name)s:%(message)s")
-    )
-    stream_handler.stream = sys.stderr
+            logger.removeHandler(h)
+
     # Propagate so that ``caplog`` fixtures can capture these records.
     logger.propagate = True
 
@@ -607,7 +600,7 @@ def backup_to_nostr(
     logger.debug("Preparing backup for pubkey=%s", pk_hex)
     content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True), nostr_priv)
     event = _create_event(sk_hex, pk_hex, content, nostr_priv, tag=tag)
-    urls = relay_urls or DEFAULT_RELAYS
+    urls = relay_urls if relay_urls is not None else DEFAULT_RELAYS
     logger.debug("Publishing to relays: %s", urls)
     success_count = 0
     for url in urls:
@@ -667,6 +660,11 @@ def backup_nonces_to_nostr(
     will be encrypted and sent to relays using :data:`NONCES_TAG`.
     """
 
+    logger.debug("Backing up nonce snapshot: %s", nonces)
+    for user, sites in nonces.items():
+        for site, nonce in sites.items():
+            logger.debug("nonce[%s][%s]=%s", user, site, nonce)
+
     return backup_to_nostr(
         private_key_hex,
         {"nonces": nonces},
@@ -691,7 +689,7 @@ def restore_from_nostr(
 
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
-    urls = relay_urls or DEFAULT_RELAYS
+    urls = relay_urls if relay_urls is not None else DEFAULT_RELAYS
     logger.debug("Restoring from relays: %s", urls)
     for url in urls:
         try:
@@ -763,7 +761,7 @@ def restore_history_from_nostr(
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
     events: List[Dict] = []
-    urls = relay_urls or DEFAULT_RELAYS
+    urls = relay_urls if relay_urls is not None else DEFAULT_RELAYS
     logger.debug("Fetching history from relays: %s", urls)
     for url in urls:
         try:
@@ -864,7 +862,7 @@ def load_nonces(
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
     # Try relays
-    urls = relay_urls or DEFAULT_RELAYS
+    urls = relay_urls if relay_urls is not None else DEFAULT_RELAYS
     logger.debug("Loading nonces from relays: %s", urls)
     for url in urls:
         try:
@@ -890,11 +888,32 @@ def load_nonces(
                         for site, nonce in sites.items():
                             try:
                                 coerced[site] = int(nonce)
+                                logger.debug(
+                                    "Relay %s nonce[%s][%s]=%d",
+                                    url,
+                                    user,
+                                    site,
+                                    coerced[site],
+                                )
                             except Exception:
+                                logger.debug(
+                                    "Relay %s invalid nonce[%s][%s]=%r",
+                                    url,
+                                    user,
+                                    site,
+                                    nonce,
+                                )
                                 continue
                         if coerced:
                             out[user] = coerced
+                            logger.debug(
+                                "Relay %s aggregated nonces for %s: %s",
+                                url,
+                                user,
+                                coerced,
+                            )
                     if out:
+                        logger.debug("Returning nonces from relay %s: %s", url, out)
                         return out
             except Exception as exc:
                 logger.debug("Failed to decrypt/parse nonces: %s", exc)
@@ -926,11 +945,29 @@ def load_nonces(
                                 for site, nonce in sites.items():
                                     try:
                                         coerced[site] = int(nonce)
+                                        logger.debug(
+                                            "File nonce[%s][%s]=%d",
+                                            user,
+                                            site,
+                                            coerced[site],
+                                        )
                                     except Exception:
+                                        logger.debug(
+                                            "File invalid nonce[%s][%s]=%r",
+                                            user,
+                                            site,
+                                            nonce,
+                                        )
                                         continue
                                 if coerced:
                                     out[user] = coerced
+                                    logger.debug(
+                                        "File aggregated nonces for %s: %s",
+                                        user,
+                                        coerced,
+                                    )
                             if out:
+                                logger.debug("Returning nonces from file: %s", out)
                                 return out
     except Exception as exc:  # pragma: no cover - best effort
         logger.debug("Failed to read/decrypt nonces from file: %s", exc)
@@ -957,13 +994,32 @@ def load_nonces(
                         for site, nonce in sites.items():
                             try:
                                 coerced[site] = int(nonce)
+                                logger.debug(
+                                    "Session nonce[%s][%s]=%d",
+                                    user,
+                                    site,
+                                    coerced[site],
+                                )
                             except Exception:
+                                logger.debug(
+                                    "Session invalid nonce[%s][%s]=%r",
+                                    user,
+                                    site,
+                                    nonce,
+                                )
                                 continue
                         if coerced:
                             out[user] = coerced
+                            logger.debug(
+                                "Session aggregated nonces for %s: %s",
+                                user,
+                                coerced,
+                            )
                     if out:
+                        logger.debug("Returning nonces from session: %s", out)
                         return out
             except Exception as exc:
                 logger.debug("Failed to decrypt/parse nonces from session: %s", exc)
 
+    logger.debug("No nonces found; returning empty mapping")
     return {}
