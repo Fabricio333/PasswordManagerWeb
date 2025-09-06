@@ -10,10 +10,10 @@ import json
 from password_manager.password import generate_password
 from password_manager.nostr_utils import (
     backup_to_nostr,
+    backup_nonces_to_nostr,
     restore_from_nostr,
     restore_history_from_nostr,
     load_nonces,
-    NONCES_TAG,
 )
 
 
@@ -247,13 +247,12 @@ class PasswordManagerGUI(tk.Tk):
                 self.nonces = json.loads(text.get("1.0", tk.END))
                 # Save nonces snapshot locally and publish to relays (if reachable)
                 relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
-                result = backup_to_nostr(
+                result = backup_nonces_to_nostr(
                     self.keys["private_key"],
-                    {"nonces": self.nonces},
+                    self.nonces,
                     relay_urls=relay_urls,
                     debug=self.debug,
                     return_status=True,
-                    tag=NONCES_TAG,
                 )
                 if result.get("published"):
                     messagebox.showinfo("Nonces", f"Nonces saved and published (id {result['event_id']})")
