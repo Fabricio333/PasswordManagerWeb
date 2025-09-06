@@ -7,6 +7,7 @@ from password_manager.seed import (
 )
 from pathlib import Path
 import json
+from urllib.parse import urlparse
 from password_manager.password import generate_password
 from password_manager.nostr_utils import (
     backup_to_nostr,
@@ -182,6 +183,14 @@ class PasswordManagerGUI(tk.Tk):
             except Exception:
                 human = str(ts)
             src = item.get("source", "")
+            relay = item.get("relay")
+            if src == "relay" and relay:
+                try:
+                    src_disp = urlparse(relay).netloc or relay
+                except Exception:
+                    src_disp = relay
+            else:
+                src_disp = src
             eid = item.get("event_id", "")
             # If this is a nonces snapshot, present a tailored summary
             if isinstance(item, dict) and "nonces" in item:
@@ -189,12 +198,12 @@ class PasswordManagerGUI(tk.Tk):
                     count = len(item.get("nonces") or {})
                 except Exception:
                     count = 0
-                return f"{human}  NONCES snapshot ({count} entries)  [{src}]  id={eid[:10]}..."
+                return f"{human}  NONCES snapshot ({count} entries)  [{src_disp}]  id={eid[:10]}..."
             # Otherwise treat as a standard password backup event
             user = item.get("user", "")
             site = item.get("site", "")
             nonce = item.get("nonce", "")
-            return f"{human}  {user}@{site} nonce={nonce}  [{src}]  id={eid[:10]}..."
+            return f"{human}  {user}@{site} nonce={nonce}  [{src_disp}]  id={eid[:10]}..."
 
         for it in history:
             listbox.insert(tk.END, fmt_item(it))

@@ -92,11 +92,11 @@ def _configure_debug_logging(debug: bool) -> None:
 
     logger.setLevel(logging.DEBUG)
 
-    # Ensure the root logger has at least one ``StreamHandler`` so records are
-    # visible to users. If one is already present we rely on it exclusively to
-    # avoid duplicated log lines.
+    # Ensure the root logger has a ``StreamHandler`` bound to the original
+    # ``sys.__stderr__``. This avoids PyTest's captured streams from being
+    # closed between tests while still displaying debug output to the terminal.
     if not any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers):
-        root_handler = logging.StreamHandler()
+        root_handler = logging.StreamHandler(sys.__stderr__)
         root_handler.setFormatter(
             logging.Formatter("%(levelname)s:%(name)s:%(message)s")
         )
@@ -774,6 +774,7 @@ def restore_history_from_nostr(
             fetched = _fetch_history_from_relay(url, pk_hex, limit, tag=BACKUP_TAG)
             for ev in fetched:
                 ev.setdefault("_source", "relay")
+                ev.setdefault("_relay", url)
             events.extend(fetched)
             # Fetch legacy nonces snapshots for backwards compatibility
             fetched_nonces = _fetch_history_from_relay(
@@ -781,6 +782,7 @@ def restore_history_from_nostr(
             )
             for ev in fetched_nonces:
                 ev.setdefault("_source", "relay")
+                ev.setdefault("_relay", url)
             events.extend(fetched_nonces)
         except Exception as exc:
             logger.debug("Failed to fetch history from %s: %s", url, exc)
@@ -839,6 +841,8 @@ def restore_history_from_nostr(
                 item["created_at"] = event.get("created_at")
             if event.get("_source"):
                 item["source"] = event.get("_source")
+            if event.get("_relay"):
+                item["relay"] = event.get("_relay")
             history.append(item)
         except Exception as exc:
             logger.debug("Failed to decrypt event %s: %s", event.get("id"), exc)

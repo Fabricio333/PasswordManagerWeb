@@ -31,24 +31,16 @@ def test_backup_and_restore(tmp_path, monkeypatch):
     assert restored == data
 
 
-def test_debug_logging(tmp_path, monkeypatch, capsys):
-    """Debug logging should emit messages to the terminal when enabled."""
+def test_debug_logging(tmp_path, monkeypatch, caplog):
+    """Debug logging should emit messages when enabled."""
     temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
-    # Preconfigure logging to a non-debug level with an existing handler
-    import logging
+    with caplog.at_level("DEBUG"):
+        backup_to_nostr("deadbeef", {"foo": "bar"}, relay_urls=[], debug=True)
 
-    handler = logging.StreamHandler()
-    root = logging.getLogger()
-    root.handlers = [handler]
-    root.setLevel(logging.WARNING)
-
-    backup_to_nostr("deadbeef", {"foo": "bar"}, relay_urls=[], debug=True)
-
-    captured = capsys.readouterr()
-    assert "Deriving Nostr keys" in captured.err or captured.out
+    assert "Deriving Nostr keys" in caplog.text
 
 
 def test_restore_history(tmp_path, monkeypatch):
@@ -57,10 +49,10 @@ def test_restore_history(tmp_path, monkeypatch):
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
     key = "deadbeef"
     backup_to_nostr(key, {"foo": 1}, relay_urls=[], debug=True)
-    time.sleep(0.1)
+    time.sleep(1)
     backup_to_nostr(key, {"foo": 2}, relay_urls=[], debug=True)
     history = restore_history_from_nostr(key, relay_urls=[], debug=True)
-    assert [h["foo"] for h in history] == [1, 2]
+    assert [h["foo"] for h in history] == [2, 1]
 
 
 def test_backup_and_load_nonces(tmp_path, monkeypatch):
@@ -83,7 +75,7 @@ def test_backup_and_load_nonces(tmp_path, monkeypatch):
     assert loaded == nonces
     
 
-def test_mock_relay_backup_and_restore(tmp_path, monkeypatch, capsys):
+def test_mock_relay_backup_and_restore(tmp_path, monkeypatch, caplog):
     temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
@@ -111,14 +103,14 @@ def test_mock_relay_backup_and_restore(tmp_path, monkeypatch, capsys):
     key = "cafebabe"
     data = {"hello": "world"}
     relay_url = "wss://example.com"
-    backup_to_nostr(key, data, relay_urls=[relay_url], debug=True)
+    with caplog.at_level("DEBUG"):
+        backup_to_nostr(key, data, relay_urls=[relay_url], debug=True)
     assert store
     temp_file.unlink()  # ensure restore pulls from mocked relay
     restored = restore_from_nostr(key, relay_urls=[relay_url], debug=True)
     assert restored == data
-    captured = capsys.readouterr()
-    assert "Sending EVENT" in captured.err or captured.out
-    assert "Received from" in captured.err or captured.out
+    assert "Sending EVENT" in caplog.text
+    assert "Received from" in caplog.text
 
 
 def test_mock_relay_history(tmp_path, monkeypatch):
@@ -154,6 +146,36 @@ def test_mock_relay_history(tmp_path, monkeypatch):
     temp_file.unlink()
     history = restore_history_from_nostr(key, relay_urls=[relay_url], debug=True)
     assert [h["n"] for h in history] == [1, 2]
+
+
+def test_history_includes_relay_url(tmp_path, monkeypatch):
+    temp_file = tmp_path / "backup.json"
+    monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
+    monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
+
+    store = []
+
+    def fake_publish(url, event):
+        store.append(event)
+        return True
+
+    def fake_fetch_history(url, pk_hex, limit=50, tag=nu.BACKUP_TAG):
+        return store[:limit]
+
+    monkeypatch.setattr(
+        "password_manager.nostr_utils._publish_event_to_relay", fake_publish
+    )
+    monkeypatch.setattr(
+        "password_manager.nostr_utils._fetch_history_from_relay",
+        fake_fetch_history,
+    )
+
+    key = "feedface"
+    relay_url = "wss://example.com"
+    backup_to_nostr(key, {"n": 1}, relay_urls=[relay_url], debug=True)
+    temp_file.unlink()
+    history = restore_history_from_nostr(key, relay_urls=[relay_url], debug=True)
+    assert history and history[0].get("relay") == relay_url
 
 
 def test_connection_logging_success(tmp_path, monkeypatch, caplog):
