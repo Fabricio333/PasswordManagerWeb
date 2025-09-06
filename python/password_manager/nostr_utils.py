@@ -15,6 +15,8 @@ import os
 import time
 import socket
 import ssl
+import sys
+from pathlib import Path
 from urllib.parse import urlparse
 from typing import Dict, List, Optional
 
@@ -23,7 +25,14 @@ from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .seed import derive_npub_from_nsec
-from .bech32 import encode_nsec
+
+# ``encode_nsec`` is optional; the surrounding application can operate purely
+# with hex keys.  When unavailable we simply skip creating the python-nostr
+# helper instance that expects a bech32 encoded secret.
+try:  # pragma: no cover - optional dependency
+    from .bech32 import encode_nsec  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover - bech32 helper not present
+    encode_nsec = None  # type: ignore
 
 # ``python-nostr`` provides higher level helpers for creating and signing
 # Nostr events.  The library is optional so the application can still run in
@@ -50,6 +59,9 @@ except Exception:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+# Local JSON file used for unit tests and offline storage
+BACKUP_FILE = Path("backups.json")
+
 
 def _configure_debug_logging(debug: bool) -> None:
     """Ensure debug log messages are visible when ``debug`` is ``True``.
@@ -59,10 +71,10 @@ def _configure_debug_logging(debug: bool) -> None:
     To make behaviour predictable for users, when ``debug`` is enabled we:
 
     - Set the root logger level to DEBUG (non-destructive to existing handlers).
-    - Attach a dedicated ``StreamHandler`` to this module's logger if one is
-      not already present so messages always appear on the terminal.
-    - Keep propagation disabled when adding our own handler to avoid duplicate
-      messages when the application has also configured root handlers.
+    - Attach a ``StreamHandler`` to this module's logger bound to the current
+      ``sys.stderr`` so the output is visible to ``capsys`` during tests.
+    - Allow records to propagate to the root logger so ``caplog`` can observe
+      them while still emitting to the terminal.
     """
     if not debug:
         return
@@ -79,17 +91,24 @@ def _configure_debug_logging(debug: bool) -> None:
         root_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
         root_logger.addHandler(root_handler)
 
-    # Always ensure this module has a console stream handler so debug logs are
-    # visible even in GUI contexts where the root handler may not print to the
-    # terminal or might be at a higher level.
-    has_stream = any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
-    if not has_stream:
-        handler = logging.StreamHandler()
-        handler.setLevel(logging.DEBUG)
-        handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
-        logger.addHandler(handler)
-        # Avoid duplicate emission if root also handles this logger.
-        logger.propagate = False
+    # Ensure this module always has a stream handler pointing at the current
+    # ``sys.stderr``. Replace any existing handler to avoid stale references to
+    # pre-captured streams when tests use ``capsys``.
+    stream_handler = None
+    for h in list(logger.handlers):
+        if isinstance(h, logging.StreamHandler):
+            stream_handler = h
+            break
+    if stream_handler is None:
+        stream_handler = logging.StreamHandler()
+        logger.addHandler(stream_handler)
+    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.setFormatter(
+        logging.Formatter("%(levelname)s:%(name)s:%(message)s")
+    )
+    stream_handler.stream = sys.stderr
+    # Propagate so that ``caplog`` fixtures can capture these records.
+    logger.propagate = True
 
 
 # In‑memory session cache of events by pubkey (hex)
@@ -174,7 +193,7 @@ def _derive_keypair(
     # versions that do not implement `from_hex`.
     if NostrPrivateKey:
         try:
-            if hasattr(NostrPrivateKey, "from_nsec"):
+            if hasattr(NostrPrivateKey, "from_nsec") and encode_nsec:
                 nostr_priv = NostrPrivateKey.from_nsec(encode_nsec(sk_hex))
             elif hasattr(NostrPrivateKey, "from_hex"):
                 nostr_priv = NostrPrivateKey.from_hex(sk_hex)
@@ -199,10 +218,23 @@ def _encrypt_nip04(
 ) -> str:
     """Encrypt ``plaintext`` using NIP‑04 (self‑encryption).
 
-    Compatibility: mimic nostr-tools behavior by deriving the shared secret
-    using the x-only public key with even-Y compression (02 || x) and AES-CBC
-    with PKCS#7 padding. This ensures the web app can decrypt.
+    When the optional ``python-nostr`` library is available the implementation
+    is delegated to its :meth:`encrypt_message` helper which mirrors the web
+    ``nip04.encrypt`` behaviour.  Otherwise a local compatible fallback using
+    AES-CBC with PKCS#7 padding is used.
     """
+
+    if nostr_priv:
+        try:  # pragma: no cover - exercised when python-nostr is installed
+            logger.debug("Encrypting data via NIP‑04 (python-nostr)")
+            return nostr_priv.encrypt_message(
+                plaintext, nostr_priv.public_key.hex()
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(
+                "python-nostr encrypt_message failed: %s; falling back to local implementation",
+                exc,
+            )
 
     logger.debug("Encrypting data via NIP‑04 (local implementation)")
 
@@ -234,6 +266,15 @@ def _decrypt_nip04(
     ``sender_pubkey_hex`` is the x-only pubkey (32-byte hex) of the event's sender.
     We reconstruct the full point as 02||x (even Y) to mirror nostr-tools ECDH.
     """
+    if nostr_priv:
+        try:  # pragma: no cover - exercised when python-nostr is installed
+            logger.debug("Decrypting NIP‑04 payload (python-nostr)")
+            return nostr_priv.decrypt_message(ciphertext, sender_pubkey_hex)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(
+                "python-nostr decrypt_message failed: %s; falling back to local implementation",
+                exc,
+            )
 
     logger.debug("Decrypting NIP‑04 payload (local implementation)")
 
@@ -568,6 +609,20 @@ def backup_to_nostr(
             logger.debug("Failed to publish to %s: %s", url, exc)
 
     _SESSION_EVENTS.setdefault(pk_hex, []).append(event)
+
+    # Persist event to local backup file so tests and offline use can read it
+    try:
+        if BACKUP_FILE.exists():
+            existing = json.loads(BACKUP_FILE.read_text())
+            if not isinstance(existing, list):
+                existing = []
+        else:
+            existing = []
+        existing.append(event)
+        BACKUP_FILE.write_text(json.dumps(existing))
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.debug("Failed to write backup file %s: %s", BACKUP_FILE, exc)
+
     logger.debug(
         "Cached event in session (count=%d) successes=%d/%d id=%s",
         len(_SESSION_EVENTS[pk_hex]),
@@ -610,19 +665,38 @@ def restore_from_nostr(
             )
             return json.loads(decrypted)
 
+    logger.debug("Falling back to local cache for pubkey=%s", pk_hex)
+
+    # Prefer reading from the JSON backup file if it exists
+    try:
+        if BACKUP_FILE.exists():
+            file_events = json.loads(BACKUP_FILE.read_text())
+            for ev in reversed(file_events):
+                if ev.get("pubkey") == pk_hex:
+                    decrypted = _decrypt_nip04(
+                        priv,
+                        ev.get("content", ""),
+                        ev.get("pubkey", pk_hex),
+                        nostr_priv,
+                    )
+                    return json.loads(decrypted)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.debug("Failed to read backup file %s: %s", BACKUP_FILE, exc)
+
+    # Finally fall back to the in-memory session cache
     logger.debug("Falling back to session cache for pubkey=%s", pk_hex)
     events = _SESSION_EVENTS.get(pk_hex) or []
     if events:
-        event = events[-1]
+        ev = events[-1]
         decrypted = _decrypt_nip04(
             priv,
-            event.get("content", ""),
-            event.get("pubkey", pk_hex),
+            ev.get("content", ""),
+            ev.get("pubkey", pk_hex),
             nostr_priv,
         )
         return json.loads(decrypted)
 
-    raise ValueError("No backup found for provided key on relays or session cache")
+    raise ValueError("No backup found for provided key on relays, file, or session cache")
 
 
 def restore_history_from_nostr(
@@ -648,6 +722,16 @@ def restore_history_from_nostr(
             events.extend(_fetch_history_from_relay(url, pk_hex, limit))
         except Exception as exc:
             logger.debug("Failed to fetch history from %s: %s", url, exc)
+
+    if not events:
+        logger.debug("No relay history; checking backup file")
+        try:
+            if BACKUP_FILE.exists():
+                file_events = json.loads(BACKUP_FILE.read_text())
+                if isinstance(file_events, list):
+                    events = [e for e in file_events if e.get("pubkey") == pk_hex][-limit:]
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.debug("Failed to read backup file %s: %s", BACKUP_FILE, exc)
 
     if not events:
         logger.debug("No relay history; falling back to session cache")
