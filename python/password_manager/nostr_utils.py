@@ -654,6 +654,29 @@ def backup_to_nostr(
     return event["id"]
 
 
+def backup_nonces_to_nostr(
+    private_key_hex: str,
+    nonces: Dict[str, Dict[str, int]],
+    relay_urls: Optional[List[str]] = None,
+    debug: bool = False,
+    return_status: bool = False,
+) -> object:
+    """Convenience wrapper to publish a nonces snapshot.
+
+    ``nonces`` should be a mapping of ``{"user": {"site": nonce_int}}`` which
+    will be encrypted and sent to relays using :data:`NONCES_TAG`.
+    """
+
+    return backup_to_nostr(
+        private_key_hex,
+        {"nonces": nonces},
+        relay_urls=relay_urls,
+        debug=debug,
+        return_status=return_status,
+        tag=NONCES_TAG,
+    )
+
+
 def restore_from_nostr(
     private_key_hex: str,
     relay_urls: Optional[List[str]] = None,
@@ -823,11 +846,17 @@ def load_nonces(
     private_key_hex: str,
     relay_urls: Optional[List[str]] = None,
     debug: bool = False,
-) -> Dict[str, int]:
-    """Load the latest nonces mapping for the key from relays or local cache.
+) -> Dict[str, Dict[str, int]]:
+    """Load the latest per-user/site nonce mapping for the key.
 
-    - Tries relays first (most recent NONCES_TAG event), then local file, then
-      in-memory session cache. Returns an empty dict if none found.
+    The returned structure mirrors the browser implementation and is of the
+    form ``{"user": {"site": nonce_int}}``. Lookup order is:
+
+    1. Most recent :data:`NONCES_TAG` event from provided relays.
+    2. Local backup file.
+    3. In-memory session cache.
+
+    When no data is found an empty dict is returned.
     """
 
     _configure_debug_logging(debug)
@@ -852,15 +881,21 @@ def load_nonces(
                     nostr_priv,
                 )
                 data = json.loads(plaintext)
-                if isinstance(data, dict) and "nonces" in data and isinstance(data["nonces"], dict):
-                    # coerce int values when possible
-                    out = {}
-                    for k, v in data["nonces"].items():
-                        try:
-                            out[k] = int(v)
-                        except Exception:
+                if isinstance(data, dict) and isinstance(data.get("nonces"), dict):
+                    out: Dict[str, Dict[str, int]] = {}
+                    for user, sites in data["nonces"].items():
+                        if not isinstance(sites, dict):
                             continue
-                    return out
+                        coerced: Dict[str, int] = {}
+                        for site, nonce in sites.items():
+                            try:
+                                coerced[site] = int(nonce)
+                            except Exception:
+                                continue
+                        if coerced:
+                            out[user] = coerced
+                    if out:
+                        return out
             except Exception as exc:
                 logger.debug("Failed to decrypt/parse nonces: %s", exc)
 
@@ -882,14 +917,21 @@ def load_nonces(
                             nostr_priv,
                         )
                         data = json.loads(plaintext)
-                        if isinstance(data, dict) and "nonces" in data and isinstance(data["nonces"], dict):
-                            out = {}
-                            for k, v in data["nonces"].items():
-                                try:
-                                    out[k] = int(v)
-                                except Exception:
+                        if isinstance(data, dict) and isinstance(data.get("nonces"), dict):
+                            out: Dict[str, Dict[str, int]] = {}
+                            for user, sites in data["nonces"].items():
+                                if not isinstance(sites, dict):
                                     continue
-                            return out
+                                coerced: Dict[str, int] = {}
+                                for site, nonce in sites.items():
+                                    try:
+                                        coerced[site] = int(nonce)
+                                    except Exception:
+                                        continue
+                                if coerced:
+                                    out[user] = coerced
+                            if out:
+                                return out
     except Exception as exc:  # pragma: no cover - best effort
         logger.debug("Failed to read/decrypt nonces from file: %s", exc)
 
@@ -906,14 +948,21 @@ def load_nonces(
                     nostr_priv,
                 )
                 data = json.loads(plaintext)
-                if isinstance(data, dict) and "nonces" in data and isinstance(data["nonces"], dict):
-                    out = {}
-                    for k, v in data["nonces"].items():
-                        try:
-                            out[k] = int(v)
-                        except Exception:
+                if isinstance(data, dict) and isinstance(data.get("nonces"), dict):
+                    out: Dict[str, Dict[str, int]] = {}
+                    for user, sites in data["nonces"].items():
+                        if not isinstance(sites, dict):
                             continue
-                    return out
+                        coerced: Dict[str, int] = {}
+                        for site, nonce in sites.items():
+                            try:
+                                coerced[site] = int(nonce)
+                            except Exception:
+                                continue
+                        if coerced:
+                            out[user] = coerced
+                    if out:
+                        return out
             except Exception as exc:
                 logger.debug("Failed to decrypt/parse nonces from session: %s", exc)
 
