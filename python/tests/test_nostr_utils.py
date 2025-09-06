@@ -12,7 +12,7 @@ import time
 
 
 def test_backup_and_restore(tmp_path, monkeypatch):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
@@ -33,7 +33,7 @@ def test_backup_and_restore(tmp_path, monkeypatch):
 
 def test_debug_logging(tmp_path, monkeypatch, capsys):
     """Debug logging should emit messages to the terminal when enabled."""
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
@@ -52,7 +52,7 @@ def test_debug_logging(tmp_path, monkeypatch, capsys):
 
 
 def test_restore_history(tmp_path, monkeypatch):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
     key = "deadbeef"
@@ -64,7 +64,7 @@ def test_restore_history(tmp_path, monkeypatch):
 
 
 def test_backup_and_load_nonces(tmp_path, monkeypatch):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
@@ -84,7 +84,7 @@ def test_backup_and_load_nonces(tmp_path, monkeypatch):
     
 
 def test_mock_relay_backup_and_restore(tmp_path, monkeypatch, capsys):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
@@ -122,7 +122,7 @@ def test_mock_relay_backup_and_restore(tmp_path, monkeypatch, capsys):
 
 
 def test_mock_relay_history(tmp_path, monkeypatch):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
@@ -157,7 +157,7 @@ def test_mock_relay_history(tmp_path, monkeypatch):
 
 
 def test_connection_logging_success(tmp_path, monkeypatch, caplog):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 
@@ -190,7 +190,7 @@ def test_connection_logging_success(tmp_path, monkeypatch, caplog):
 
 
 def test_connection_logging_failure(tmp_path, monkeypatch, caplog):
-    temp_file = tmp_path / "backups.json"
+    temp_file = tmp_path / "backup.json"
     monkeypatch.setattr("password_manager.nostr_utils.BACKUP_FILE", temp_file)
     monkeypatch.setattr("password_manager.nostr_utils._SESSION_EVENTS", {})
 

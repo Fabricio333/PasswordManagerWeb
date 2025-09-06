@@ -60,7 +60,9 @@ except Exception:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 # Local JSON file used for unit tests and offline storage
-BACKUP_FILE = Path("backups.json")
+# The project intentionally avoids creating separate cache files and only
+# persists backup events to this single JSON file.
+BACKUP_FILE = Path("backup.json")
 
 # Tags used to classify different backup event types. ``NONCES_TAG`` remains
 # only for backwards compatibility with older Python snapshots; the browser
