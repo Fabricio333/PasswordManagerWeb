@@ -76,7 +76,34 @@ class PasswordManagerGUI(tk.Tk):
             # Load nonces for this pubkey from local/relay backups
             try:
                 relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
-                self.nonces = load_nonces(self.keys["private_key"], relay_urls=relay_urls, debug=self.debug)
+                self.nonces = load_nonces(
+                    self.keys["private_key"], relay_urls=relay_urls, debug=self.debug
+                )
+                # If the newest history entry is a nonces snapshot from a relay,
+                # clone it to the local backup so that offline usage sees the
+                # latest remote state.
+                try:
+                    latest = restore_history_from_nostr(
+                        self.keys["private_key"],
+                        relay_urls=relay_urls,
+                        debug=self.debug,
+                        limit=1,
+                    )
+                except Exception:
+                    latest = []
+                if latest:
+                    item = latest[0]
+                    snapshot = None
+                    if isinstance(item, dict):
+                        snapshot = item.get("users") or item.get("nonces")
+                    if snapshot and item.get("source") == "relay":
+                        self.nonces = snapshot
+                        backup_nonces_to_nostr(
+                            self.keys["private_key"],
+                            self.nonces,
+                            relay_urls=[],
+                            debug=self.debug,
+                        )
                 self.update_nonce_field()
             except Exception:
                 pass
@@ -161,6 +188,23 @@ class PasswordManagerGUI(tk.Tk):
             self.keys["private_key"], relay_urls=relay_urls, debug=self.debug, limit=5
         )
 
+        # If any nonces snapshot exists in the retrieved history, overwrite the
+        # current nonce mapping and persist it locally for offline use.
+        for item in history:
+            snapshot = None
+            if isinstance(item, dict):
+                snapshot = item.get("users") or item.get("nonces")
+            if snapshot:
+                self.nonces = snapshot
+                backup_nonces_to_nostr(
+                    self.keys["private_key"],
+                    self.nonces,
+                    relay_urls=[],
+                    debug=self.debug,
+                )
+                self.update_nonce_field()
+                break
+
         win = tk.Toplevel(self)
         win.title("Nostr History (select to restore)")
 
@@ -193,9 +237,12 @@ class PasswordManagerGUI(tk.Tk):
                 src_disp = src
             eid = item.get("event_id", "")
             # If this is a nonces snapshot, present a tailored summary
-            if isinstance(item, dict) and "nonces" in item:
+            if isinstance(item, dict) and (
+                "nonces" in item or "users" in item
+            ):
+                source = item.get("users") or item.get("nonces")
                 try:
-                    count = len(item.get("nonces") or {})
+                    count = len(source or {})
                 except Exception:
                     count = 0
                 return f"{human}  NONCES snapshot ({count} entries)  [{src_disp}]  id={eid[:10]}..."
@@ -216,22 +263,45 @@ class PasswordManagerGUI(tk.Tk):
                 return
             item = history[idx[0]]
             # If the item is a nonces snapshot, update nonces and refresh field
-            if isinstance(item, dict) and "nonces" in item:
+            snapshot = None
+            if isinstance(item, dict):
+                snapshot = item.get("users") or item.get("nonces")
+            if snapshot is not None:
                 try:
-                    self.nonces = item.get("nonces") or {}
+                    self.nonces = snapshot or {}
+                    backup_nonces_to_nostr(
+                        self.keys["private_key"],
+                        self.nonces,
+                        relay_urls=[],
+                        debug=self.debug,
+                    )
                     self.update_nonce_field()
-                    messagebox.showinfo("Restore", f"Loaded NONCES snapshot {item.get('event_id','')}")
+                    messagebox.showinfo(
+                        "Restore", f"Loaded NONCES snapshot {item.get('event_id','')}"
+                    )
                 except Exception as exc:
                     messagebox.showerror("Restore", f"Failed to load nonces: {exc}")
             else:
                 # Load fields into the main form for password backup
+                user = item.get("user", "")
+                site = item.get("site", "")
+                nonce_val = int(item.get("nonce", 0))
                 self.user_entry.delete(0, tk.END)
-                self.user_entry.insert(0, item.get("user", ""))
+                self.user_entry.insert(0, user)
                 self.site_entry.delete(0, tk.END)
-                self.site_entry.insert(0, item.get("site", ""))
+                self.site_entry.insert(0, site)
                 self.nonce_entry.delete(0, tk.END)
-                self.nonce_entry.insert(0, str(item.get("nonce", "0")))
+                self.nonce_entry.insert(0, str(nonce_val))
                 self.password_var.set(item.get("password", ""))
+                # Overwrite nonce mapping with the restored event details
+                if user and site:
+                    self.nonces.setdefault(user, {})[site] = nonce_val
+                    backup_nonces_to_nostr(
+                        self.keys["private_key"],
+                        self.nonces,
+                        relay_urls=[],
+                        debug=self.debug,
+                    )
                 messagebox.showinfo("Restore", f"Loaded event {item.get('event_id','')}")
             win.destroy()
 
@@ -287,13 +357,12 @@ class PasswordManagerGUI(tk.Tk):
         self.seed_entry.delete(0, tk.END)
         self.seed_entry.insert(0, phrase)
         self.keys = derive_keys(phrase)
+        # Generating a new mnemonic should be entirely local.  Avoid any
+        # interaction with Nostr relays or backups for a freshly created key
+        # so no relay backup is created implicitly.
+        self.nonces = {}
+        self.update_nonce_field()
         messagebox.showinfo("Seed", "New seed phrase generated")
-        try:
-            relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
-            self.nonces = load_nonces(self.keys["private_key"], relay_urls=relay_urls, debug=self.debug)
-            self.update_nonce_field()
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":
