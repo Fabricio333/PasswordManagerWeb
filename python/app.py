@@ -8,7 +8,7 @@ import logging
 from gui import PasswordManagerGUI
 
 
-def main(debug: bool = False) -> None:
+def main(debug: bool = True) -> None:
     """Launch the Tkinter-based password manager.
 
     Parameters

@@ -1,13 +1,10 @@
 """Helpers for backing up and restoring data via the Nostr protocol.
 
-The real Nostr network requires WebSocket connectivity and Schnorr
-signatures.  The execution environment for the educational version of this
-project does not have those third‑party dependencies available, so the
-implementation below performs the cryptography locally while still creating
-properly structured Nostr events.  Key derivation and encryption follow the
-same rules as the accompanying web application so the two remain compatible.
-Extensive debug logging is provided to mirror what a full implementation
-would do.
+Backups are published to real Nostr relays for persistence, and a simple
+in‑memory session cache is used as a temporary holding area. If the optional
+``python-nostr`` library is available it is used for convenience; otherwise
+local cryptographic primitives are used. When ``debug=True`` detailed logs
+are emitted for all execution paths and errors.
 """
 
 import base64
@@ -19,7 +16,6 @@ import time
 import socket
 import ssl
 from urllib.parse import urlparse
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -27,6 +23,7 @@ from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .seed import derive_npub_from_nsec
+from .bech32 import encode_nsec
 
 # ``python-nostr`` provides higher level helpers for creating and signing
 # Nostr events.  The library is optional so the application can still run in
@@ -42,27 +39,68 @@ except Exception:  # pragma: no cover - the library is not installed
     NostrPrivateKey = None  # type: ignore
     NostrEvent = None  # type: ignore
 
+# Optional CA bundle via certifi to avoid macOS certificate issues
+try:  # pragma: no cover - optional dependency
+    import certifi  # type: ignore
+    _CERTIFI_CA = certifi.where()  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover
+    certifi = None  # type: ignore
+    _CERTIFI_CA = None
+
 
 logger = logging.getLogger(__name__)
 
 
 def _configure_debug_logging(debug: bool) -> None:
-    """Ensure debug messages are emitted to the terminal when ``debug`` is ``True``."""
+    """Ensure debug log messages are visible when ``debug`` is ``True``.
+
+    Many GUI launch environments preconfigure logging with non-console handlers
+    or higher levels, which can unintentionally suppress module debug output.
+    To make behaviour predictable for users, when ``debug`` is enabled we:
+
+    - Set the root logger level to DEBUG (non-destructive to existing handlers).
+    - Attach a dedicated ``StreamHandler`` to this module's logger if one is
+      not already present so messages always appear on the terminal.
+    - Keep propagation disabled when adding our own handler to avoid duplicate
+      messages when the application has also configured root handlers.
+    """
     if not debug:
         return
+
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
+
     logger.setLevel(logging.DEBUG)
+
+    # If the application has not configured any root handlers, set up a simple
+    # console handler there for completeness.
     if not root_logger.handlers:
+        root_handler = logging.StreamHandler()
+        root_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+        root_logger.addHandler(root_handler)
+
+    # Always ensure this module has a console stream handler so debug logs are
+    # visible even in GUI contexts where the root handler may not print to the
+    # terminal or might be at a higher level.
+    has_stream = any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
+    if not has_stream:
         handler = logging.StreamHandler()
-        handler.setFormatter(
-            logging.Formatter("%(levelname)s:%(name)s:%(message)s")
-        )
-        root_logger.addHandler(handler)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+        logger.addHandler(handler)
+        # Avoid duplicate emission if root also handles this logger.
+        logger.propagate = False
 
 
-# File used to store simulated Nostr backup events
-BACKUP_FILE = Path(__file__).resolve().parent / "nostr_backups.json"
+# In‑memory session cache of events by pubkey (hex)
+_SESSION_EVENTS: Dict[str, List[Dict]] = {}
+
+# Default public relays to use when not provided by the caller
+DEFAULT_RELAYS: List[str] = [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.snort.social",
+]
 
 # Order of the secp256k1 curve used for Schnorr signing
 SECP256K1_N = int(
@@ -132,7 +170,23 @@ def _derive_keypair(
     priv = ec.derive_private_key(int(sk_hex, 16), ec.SECP256K1())
     pk_hex = derive_npub_from_nsec(sk_hex)
 
-    nostr_priv = NostrPrivateKey.from_hex(sk_hex) if NostrPrivateKey else None
+    # Create a python-nostr PrivateKey if available, but guard against
+    # versions that do not implement `from_hex`.
+    if NostrPrivateKey:
+        try:
+            if hasattr(NostrPrivateKey, "from_nsec"):
+                nostr_priv = NostrPrivateKey.from_nsec(encode_nsec(sk_hex))
+            elif hasattr(NostrPrivateKey, "from_hex"):
+                nostr_priv = NostrPrivateKey.from_hex(sk_hex)
+            else:
+                try:
+                    nostr_priv = NostrPrivateKey(bytes.fromhex(sk_hex))  # type: ignore[arg-type]
+                except Exception:
+                    nostr_priv = None
+        except Exception:
+            nostr_priv = None
+    else:
+        nostr_priv = None
 
     logger.debug("Derived sk=%s, pk=%s", sk_hex, pk_hex)
     return sk_hex, pk_hex, priv, nostr_priv
@@ -143,53 +197,64 @@ def _encrypt_nip04(
     plaintext: str,
     nostr_priv: Optional[NostrPrivateKey] = None,
 ) -> str:
-    """Encrypt ``plaintext`` using NIP‑04 (self‑encryption)."""
+    """Encrypt ``plaintext`` using NIP‑04 (self‑encryption).
 
-    logger.debug("Encrypting data via NIP‑04")
+    Compatibility: mimic nostr-tools behavior by deriving the shared secret
+    using the x-only public key with even-Y compression (02 || x) and AES-CBC
+    with PKCS#7 padding. This ensures the web app can decrypt.
+    """
 
-    # If the high level ``python-nostr`` helper is available use it for the
-    # actual cryptography.  This mirrors what a real client would do.  When the
-    # dependency is missing we fall back to a small local implementation so the
-    # educational version keeps working.
-    if nostr_priv and hasattr(nostr_priv, "encrypt_message"):
-        return nostr_priv.encrypt_message(nostr_priv.public_key.hex(), plaintext)
+    logger.debug("Encrypting data via NIP‑04 (local implementation)")
 
-    shared = priv.exchange(ec.ECDH(), priv.public_key())
+    # Derive peer public key as 02||x (even Y) from our own public key's x.
+    pub_x = priv.public_key().public_numbers().x
+    peer = ec.EllipticCurvePublicKey.from_encoded_point(
+        ec.SECP256K1(), b"\x02" + pub_x.to_bytes(32, "big")
+    )
+    shared = priv.exchange(ec.ECDH(), peer)
     key = hashlib.sha256(shared).digest()
     iv = os.urandom(16)
-    padder = padding.PKCS7(128).padder()
-    padded = padder.update(plaintext.encode()) + padder.finalize()
+    # Use PKCS#7 padding (block size 128 bits)
+    padder = padding.PKCS7(128).padder()  # type: ignore[name-defined]
+    data = padder.update(plaintext.encode()) + padder.finalize()
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
     encryptor = cipher.encryptor()
-    ct = encryptor.update(padded) + encryptor.finalize()
+    ct = encryptor.update(data) + encryptor.finalize()
     return f"{base64.b64encode(ct).decode()}?iv={base64.b64encode(iv).decode()}"
 
 
 def _decrypt_nip04(
     priv: ec.EllipticCurvePrivateKey,
     ciphertext: str,
+    sender_pubkey_hex: str,
     nostr_priv: Optional[NostrPrivateKey] = None,
 ) -> str:
-    """Decrypt a NIP‑04 payload produced by :func:`_encrypt_nip04`."""
+    """Decrypt a NIP‑04 payload produced by :func:`_encrypt_nip04` or nostr-tools.
 
-    logger.debug("Decrypting NIP‑04 payload")
+    ``sender_pubkey_hex`` is the x-only pubkey (32-byte hex) of the event's sender.
+    We reconstruct the full point as 02||x (even Y) to mirror nostr-tools ECDH.
+    """
 
-    if nostr_priv and hasattr(nostr_priv, "decrypt_message"):
-        return nostr_priv.decrypt_message(nostr_priv.public_key.hex(), ciphertext)
+    logger.debug("Decrypting NIP‑04 payload (local implementation)")
 
     try:
         data, iv_b64 = ciphertext.split("?iv=")
     except ValueError as exc:
         raise ValueError("Invalid ciphertext format") from exc
 
-    shared = priv.exchange(ec.ECDH(), priv.public_key())
+    # Build peer key from x-only hex with even Y
+    x_bytes = bytes.fromhex(sender_pubkey_hex)
+    if len(x_bytes) != 32:
+        raise ValueError("Invalid sender pubkey length")
+    peer = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256K1(), b"\x02" + x_bytes)
+    shared = priv.exchange(ec.ECDH(), peer)
     key = hashlib.sha256(shared).digest()
     iv = base64.b64decode(iv_b64)
     ct = base64.b64decode(data)
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
     decryptor = cipher.decryptor()
     padded = decryptor.update(ct) + decryptor.finalize()
-    unpadder = padding.PKCS7(128).unpadder()
+    unpadder = padding.PKCS7(128).unpadder()  # type: ignore[name-defined]
     plaintext = unpadder.update(padded) + unpadder.finalize()
     return plaintext.decode()
 
@@ -202,18 +267,28 @@ def _create_event(
 ) -> Dict:
     """Create a Nostr style event signed with ``sk_hex``."""
 
-    logger.debug("Creating event for content: %s", content)
+    logger.debug("Creating event for content length: %d", len(content))
 
     # Prefer the higher level ``python-nostr`` implementation when possible.
     if nostr_priv and NostrEvent is not None:
         ev = NostrEvent(
-            content=content,
-            kind=1,
-            tags=[["t", "nostr-pwd-backup"]],
+            pk_hex,
+            content,
+            int(time.time()),
+            1,
+            [["t", "nostr-pwd-backup"]],
         )
         nostr_priv.sign_event(ev)
-        nostr_event = json.loads(ev.to_json())
-        logger.debug("Created event via python-nostr: %s", nostr_event)
+        nostr_event = {
+            "id": ev.id,
+            "pubkey": ev.public_key,
+            "created_at": ev.created_at,
+            "kind": ev.kind,
+            "tags": ev.tags,
+            "content": ev.content,
+            "sig": ev.signature,
+        }
+        logger.debug("Created event via python-nostr id=%s", nostr_event["id"])
         return nostr_event
 
     # Fallback to a local implementation that manually performs the signing.
@@ -251,12 +326,64 @@ class _WSConnection:
         path = parsed.path or "/"
         logger.debug("WebSocket connection to %s opening", url)
         try:
-            raw = socket.create_connection((host, port), timeout=5)
+            raw = socket.create_connection((host, port), timeout=10)
             if parsed.scheme == "wss":
-                context = ssl.create_default_context()
+                insecure = os.environ.get("NOSTR_INSECURE_TLS") == "1"
+                if insecure:
+                    logger.debug("Using INSECURE TLS context for %s", url)
+                    context = ssl._create_unverified_context()
+                else:
+                    # Create SSL context with proper certificate handling
+                    context = ssl.create_default_context()
+
+                    # Try using certifi CA bundle if available
+                    if _CERTIFI_CA:
+                        logger.debug("Using certifi CA bundle for TLS: %s", _CERTIFI_CA)
+                        context = ssl.create_default_context(cafile=_CERTIFI_CA)
+
+                    # Additional SSL context configuration for better compatibility
+                    context.check_hostname = True
+                    context.verify_mode = ssl.CERT_REQUIRED
+
+                    # Load system certificates as fallback
+                    try:
+                        context.load_default_certs()
+                    except Exception as e:
+                        logger.debug("Failed to load default certs: %s", e)
+
+                    # For macOS specifically - try loading system keychain
+                    import platform
+                    if platform.system() == 'Darwin':
+                        try:
+                            # Load macOS system certificates
+                            context.load_verify_locations(capath='/System/Library/OpenSSL/certs')
+                        except Exception as e:
+                            logger.debug("Failed to load macOS system certs: %s", e)
+
+                        try:
+                            # Alternative macOS certificate paths
+                            for cert_path in [
+                                '/usr/local/etc/openssl/cert.pem',
+                                '/opt/homebrew/etc/openssl/cert.pem',
+                                '/etc/ssl/cert.pem'
+                            ]:
+                                if os.path.exists(cert_path):
+                                    context.load_verify_locations(cafile=cert_path)
+                                    logger.debug("Loaded certificates from %s", cert_path)
+                                    break
+                        except Exception as e:
+                            logger.debug("Failed to load alternative cert paths: %s", e)
+
                 self.sock = context.wrap_socket(raw, server_hostname=host)
             else:
                 self.sock = raw
+
+            # Ensure subsequent operations do not hang indefinitely
+            try:
+                self.sock.settimeout(10)  # Increased timeout
+            except Exception:
+                pass
+
             key = base64.b64encode(os.urandom(16)).decode()
             headers = (
                 f"GET {path} HTTP/1.1\r\n"
@@ -316,16 +443,40 @@ class _WSConnection:
         self.sock.close()
 
 
-def _publish_event_to_relay(url: str, event: Dict) -> None:
-    """Publish ``event`` to the relay at ``url`` using WebSockets."""
+def _publish_event_to_relay(url: str, event: Dict) -> bool:
+    """Publish ``event`` to the relay at ``url`` using WebSockets.
+
+    Returns True if the relay responds with an OK ack for the event id.
+    """
     logger.debug("Connecting to relay %s", url)
     ws = _WSConnection(url)
     try:
         msg = json.dumps(["EVENT", event])
-        logger.debug("Sending to %s: %s", url, msg)
+        logger.debug("Sending EVENT to %s (id=%s)", url, event.get("id"))
         ws.send(msg)
-        resp = ws.recv()
-        logger.debug("Received from %s: %s", url, resp)
+        ok = False
+        try:
+            resp = ws.recv()
+            logger.debug("Received from %s: %s", url, resp)
+            try:
+                data = json.loads(resp)
+                if (
+                    isinstance(data, list)
+                    and len(data) >= 3
+                    and data[0] == "OK"
+                    and data[1] == event.get("id")
+                ):
+                    ok = bool(data[2])
+                    logger.debug(
+                        "Relay %s OK ack for id=%s: %s", url, event.get("id"), ok
+                    )
+                else:
+                    logger.debug("Relay %s unexpected reply: %s", url, data)
+            except Exception:
+                logger.debug("Relay %s non-JSON reply", url)
+        except Exception as exc:
+            logger.debug("No ack from %s (exception: %s)", url, exc)
+        return ok
     finally:
         ws.close()
 
@@ -338,7 +489,7 @@ def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
         sub_id = os.urandom(4).hex()
         filt = {"authors": [pk_hex], "#t": ["nostr-pwd-backup"], "kinds": [1], "limit": 1}
         req = json.dumps(["REQ", sub_id, filt])
-        logger.debug("Sending to %s: %s", url, req)
+        logger.debug("Sending REQ to %s: %s", url, req)
         ws.send(req)
         while True:
             msg = ws.recv()
@@ -367,7 +518,7 @@ def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50) -> List[Di
             "limit": limit,
         }
         req = json.dumps(["REQ", sub_id, filt])
-        logger.debug("Sending to %s: %s", url, req)
+        logger.debug("Sending REQ to %s: %s", url, req)
         ws.send(req)
         while True:
             msg = ws.recv()
@@ -387,48 +538,43 @@ def backup_to_nostr(
     data: Dict,
     relay_urls: Optional[List[str]] = None,
     debug: bool = False,
+
 ) -> str:
-    """Backup ``data`` by writing a Nostr style event to a local file.
+    """Backup ``data`` to Nostr relays; cache in session memory.
 
-    Parameters
-    ----------
-    private_key_hex:
-        Hex representation of the user's private key.
-    data:
-        Arbitrary JSON‑serialisable dictionary to back up.
-    relay_urls:
-        Placeholder for real relay URLs.  When ``None`` (the default) the
-        backup is stored locally.
-    debug:
-        When ``True`` debug information is logged using :mod:`logging`.
-
-    Returns
-    -------
-    str
-        The generated event id which can later be used to locate the
-        backup.
+    - Publishes the encrypted event to provided ``relay_urls`` or defaults.
+    - Always stores the event in a session cache keyed by pubkey for quick
+      restore within the same runtime.
+    - Detailed debug logs are emitted when ``debug=True``.
     """
 
     _configure_debug_logging(debug)
 
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
+    logger.debug("Preparing backup for pubkey=%s", pk_hex)
     content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True), nostr_priv)
     event = _create_event(sk_hex, pk_hex, content, nostr_priv)
+    urls = relay_urls or DEFAULT_RELAYS
+    logger.debug("Publishing to relays: %s", urls)
+    success_count = 0
+    for url in urls:
+        try:
+            logger.debug("Publishing event id=%s to %s", event["id"], url)
+            ok = _publish_event_to_relay(url, event)
+            logger.debug("Publish result %s for %s", ok, url)
+            if ok:
+                success_count += 1
+        except Exception as exc:
+            logger.debug("Failed to publish to %s: %s", url, exc)
 
-    if relay_urls:
-        for url in relay_urls:
-            try:
-                _publish_event_to_relay(url, event)
-            except Exception as exc:
-                logger.debug("Failed to publish to %s: %s", url, exc)
-
-    # Always persist the event locally as a simple form of backup
-    logger.debug("Writing event to %s", BACKUP_FILE)
-    backups = []
-    if BACKUP_FILE.exists():
-        backups = json.loads(BACKUP_FILE.read_text())
-    backups.append(event)
-    BACKUP_FILE.write_text(json.dumps(backups, indent=2))
+    _SESSION_EVENTS.setdefault(pk_hex, []).append(event)
+    logger.debug(
+        "Cached event in session (count=%d) successes=%d/%d id=%s",
+        len(_SESSION_EVENTS[pk_hex]),
+        success_count,
+        len(urls),
+        event["id"],
+    )
     return event["id"]
 
 
@@ -437,34 +583,46 @@ def restore_from_nostr(
     relay_urls: Optional[List[str]] = None,
     debug: bool = False,
 ) -> Dict:
-    """Restore backup data for the provided key from the simulated storage."""
+    """Restore backup data by fetching the latest event from relays.
+
+    Falls back to session cache when no relay data is available.
+    """
 
     _configure_debug_logging(debug)
 
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
-    if relay_urls:
-        for url in relay_urls:
-            try:
-                event = _fetch_event_from_relay(url, pk_hex)
-            except Exception as exc:
-                logger.debug("Failed to fetch from %s: %s", url, exc)
-                event = None
-            if event:
-                decrypted = _decrypt_nip04(priv, event.get("content", ""), nostr_priv)
-                return json.loads(decrypted)
-
-    if not BACKUP_FILE.exists():
-        raise FileNotFoundError("No backups available")
-
-    logger.debug("Looking for events matching pubkey %s", pk_hex)
-    backups = json.loads(BACKUP_FILE.read_text())
-    for event in reversed(backups):
-        if event.get("pubkey") == pk_hex:
-            logger.debug("Found matching event: %s", event)
-            decrypted = _decrypt_nip04(priv, event.get("content", ""), nostr_priv)
+    urls = relay_urls or DEFAULT_RELAYS
+    logger.debug("Restoring from relays: %s", urls)
+    for url in urls:
+        try:
+            event = _fetch_event_from_relay(url, pk_hex)
+        except Exception as exc:
+            logger.debug("Failed to fetch from %s: %s", url, exc)
+            event = None
+        if event:
+            logger.debug("Found event on %s: %s", url, event.get("id"))
+            decrypted = _decrypt_nip04(
+                priv,
+                event.get("content", ""),
+                event.get("pubkey", pk_hex),
+                nostr_priv,
+            )
             return json.loads(decrypted)
-    raise ValueError("No backup found for provided key")
+
+    logger.debug("Falling back to session cache for pubkey=%s", pk_hex)
+    events = _SESSION_EVENTS.get(pk_hex) or []
+    if events:
+        event = events[-1]
+        decrypted = _decrypt_nip04(
+            priv,
+            event.get("content", ""),
+            event.get("pubkey", pk_hex),
+            nostr_priv,
+        )
+        return json.loads(decrypted)
+
+    raise ValueError("No backup found for provided key on relays or session cache")
 
 
 def restore_history_from_nostr(
@@ -473,27 +631,37 @@ def restore_history_from_nostr(
     debug: bool = False,
     limit: int = 50,
 ) -> List[Dict]:
-    """Return a list of all decrypted backup entries for the key."""
+    """Return a list of all decrypted backup entries for the key.
+
+    Prefers relay history; falls back to session cache.
+    """
 
     _configure_debug_logging(debug)
 
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
 
     events: List[Dict] = []
-    if relay_urls:
-        for url in relay_urls:
-            try:
-                events.extend(_fetch_history_from_relay(url, pk_hex, limit))
-            except Exception as exc:
-                logger.debug("Failed to fetch history from %s: %s", url, exc)
-    elif BACKUP_FILE.exists():
-        backups = json.loads(BACKUP_FILE.read_text())
-        events = [e for e in backups if e.get("pubkey") == pk_hex]
+    urls = relay_urls or DEFAULT_RELAYS
+    logger.debug("Fetching history from relays: %s", urls)
+    for url in urls:
+        try:
+            events.extend(_fetch_history_from_relay(url, pk_hex, limit))
+        except Exception as exc:
+            logger.debug("Failed to fetch history from %s: %s", url, exc)
+
+    if not events:
+        logger.debug("No relay history; falling back to session cache")
+        events = _SESSION_EVENTS.get(pk_hex, [])[-limit:]
 
     history: List[Dict] = []
     for event in events:
         try:
-            decrypted = _decrypt_nip04(priv, event.get("content", ""), nostr_priv)
+            decrypted = _decrypt_nip04(
+                priv,
+                event.get("content", ""),
+                event.get("pubkey", pk_hex),
+                nostr_priv,
+            )
             item = json.loads(decrypted)
             item["event_id"] = event.get("id")
             history.append(item)

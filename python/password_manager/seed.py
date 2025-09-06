@@ -16,6 +16,7 @@ import hashlib
 import os
 from typing import Dict, List, Optional
 from cryptography.hazmat.primitives.asymmetric import ec
+from .bech32 import encode_nsec
 
 try:  # pragma: no cover - optional dependency
     from nostr.key import PrivateKey as NostrPrivateKey
@@ -104,9 +105,23 @@ def derive_keys(seed_phrase: str) -> dict:
     private_key = derive_private_key(seed_phrase)
     nsec = hashlib.sha256(private_key.encode()).hexdigest()
     npub = derive_npub_from_nsec(nsec)
-    nostr_priv: Optional[NostrPrivateKey] = (
-        NostrPrivateKey.from_hex(nsec) if NostrPrivateKey else None
-    )
+    # Try to instantiate a python-nostr PrivateKey only if the library is
+    # available and exposes a compatible constructor. Some versions do not
+    # provide `from_hex`, so we guard access and fall back gracefully.
+    nostr_priv: Optional[NostrPrivateKey] = None
+    if NostrPrivateKey:
+        try:
+            if hasattr(NostrPrivateKey, "from_nsec"):
+                nostr_priv = NostrPrivateKey.from_nsec(encode_nsec(nsec))
+            elif hasattr(NostrPrivateKey, "from_hex"):
+                nostr_priv = NostrPrivateKey.from_hex(nsec)
+            else:
+                try:
+                    nostr_priv = NostrPrivateKey(bytes.fromhex(nsec))  # type: ignore[arg-type]
+                except Exception:
+                    nostr_priv = None
+        except Exception:
+            nostr_priv = None
     return {
         "private_key": private_key,
         "nsec": nsec,
