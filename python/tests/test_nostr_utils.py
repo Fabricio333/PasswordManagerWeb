@@ -74,6 +74,10 @@ def test_backup_and_load_nonces(tmp_path, monkeypatch):
     # Store the nonces snapshot (publishing to relays is best-effort)
     backup_nonces_to_nostr(key, nonces, relay_urls=[], debug=True)
 
+    # Verify the event uses the standard backup tag
+    stored = json.loads(temp_file.read_text())[-1]
+    assert ["t", nu.BACKUP_TAG] in stored["tags"]
+
     # Ensure they can be loaded back
     loaded = load_nonces(key, relay_urls=[], debug=True)
     assert loaded == nonces

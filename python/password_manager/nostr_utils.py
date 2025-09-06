@@ -62,9 +62,11 @@ logger = logging.getLogger(__name__)
 # Local JSON file used for unit tests and offline storage
 BACKUP_FILE = Path("backups.json")
 
-# Tags used to classify different backup event types
+# Tags used to classify different backup event types. ``NONCES_TAG`` remains
+# only for backwards compatibility with older Python snapshots; the browser
+# implementation stores nonce information under the standard ``BACKUP_TAG``.
 BACKUP_TAG = "nostr-pwd-backup"
-NONCES_TAG = "nostr-pwd-nonces"
+NONCES_TAG = "nostr-pwd-nonces"  # legacy
 
 
 def _configure_debug_logging(debug: bool) -> None:
@@ -657,7 +659,8 @@ def backup_nonces_to_nostr(
     """Convenience wrapper to publish a nonces snapshot.
 
     ``nonces`` should be a mapping of ``{"user": {"site": nonce_int}}`` which
-    will be encrypted and sent to relays using :data:`NONCES_TAG`.
+    will be encrypted and sent to relays using the same tag as the browser
+    implementation (:data:`BACKUP_TAG`).
     """
 
     logger.debug("Backing up nonce snapshot: %s", nonces)
@@ -667,11 +670,11 @@ def backup_nonces_to_nostr(
 
     return backup_to_nostr(
         private_key_hex,
-        {"nonces": nonces},
+        {"users": nonces},
         relay_urls=relay_urls,
         debug=debug,
         return_status=return_status,
-        tag=NONCES_TAG,
+        tag=BACKUP_TAG,
     )
 
 
@@ -770,7 +773,7 @@ def restore_history_from_nostr(
             for ev in fetched:
                 ev.setdefault("_source", "relay")
             events.extend(fetched)
-            # Fetch nonces snapshots as part of history too
+            # Fetch legacy nonces snapshots for backwards compatibility
             fetched_nonces = _fetch_history_from_relay(
                 url, pk_hex, limit, tag=NONCES_TAG
             )
@@ -850,7 +853,8 @@ def load_nonces(
     The returned structure mirrors the browser implementation and is of the
     form ``{"user": {"site": nonce_int}}``. Lookup order is:
 
-    1. Most recent :data:`NONCES_TAG` event from provided relays.
+    1. Most recent :data:`BACKUP_TAG` event from provided relays (legacy
+       :data:`NONCES_TAG` events are also supported).
     2. Local backup file.
     3. In-memory session cache.
 
@@ -865,8 +869,11 @@ def load_nonces(
     urls = relay_urls if relay_urls is not None else DEFAULT_RELAYS
     logger.debug("Loading nonces from relays: %s", urls)
     for url in urls:
+        event = None
         try:
-            event = _fetch_event_from_relay(url, pk_hex, tag=NONCES_TAG)
+            event = _fetch_event_from_relay(url, pk_hex, tag=BACKUP_TAG)
+            if event is None:
+                event = _fetch_event_from_relay(url, pk_hex, tag=NONCES_TAG)
         except Exception as exc:
             logger.debug("Failed to fetch nonces from %s: %s", url, exc)
             event = None
@@ -879,9 +886,15 @@ def load_nonces(
                     nostr_priv,
                 )
                 data = json.loads(plaintext)
-                if isinstance(data, dict) and isinstance(data.get("nonces"), dict):
+                source = None
+                if isinstance(data, dict):
+                    if isinstance(data.get("users"), dict):
+                        source = data["users"]
+                    elif isinstance(data.get("nonces"), dict):  # legacy
+                        source = data["nonces"]
+                if isinstance(source, dict):
                     out: Dict[str, Dict[str, int]] = {}
-                    for user, sites in data["nonces"].items():
+                    for user, sites in source.items():
                         if not isinstance(sites, dict):
                             continue
                         coerced: Dict[str, int] = {}
@@ -928,47 +941,57 @@ def load_nonces(
                     if ev.get("pubkey") != pk_hex:
                         continue
                     tags = ev.get("tags") or []
-                    if any(isinstance(t, list) and len(t) >= 2 and t[0] == "t" and t[1] == NONCES_TAG for t in tags):
-                        plaintext = _decrypt_nip04(
-                            priv,
-                            ev.get("content", ""),
-                            ev.get("pubkey", pk_hex),
-                            nostr_priv,
-                        )
-                        data = json.loads(plaintext)
-                        if isinstance(data, dict) and isinstance(data.get("nonces"), dict):
-                            out: Dict[str, Dict[str, int]] = {}
-                            for user, sites in data["nonces"].items():
-                                if not isinstance(sites, dict):
-                                    continue
-                                coerced: Dict[str, int] = {}
-                                for site, nonce in sites.items():
-                                    try:
-                                        coerced[site] = int(nonce)
-                                        logger.debug(
-                                            "File nonce[%s][%s]=%d",
-                                            user,
-                                            site,
-                                            coerced[site],
-                                        )
-                                    except Exception:
-                                        logger.debug(
-                                            "File invalid nonce[%s][%s]=%r",
-                                            user,
-                                            site,
-                                            nonce,
-                                        )
-                                        continue
-                                if coerced:
-                                    out[user] = coerced
+                    if not any(
+                        isinstance(t, list) and len(t) >= 2 and t[0] == "t" and t[1] in {BACKUP_TAG, NONCES_TAG}
+                        for t in tags
+                    ):
+                        continue
+                    plaintext = _decrypt_nip04(
+                        priv,
+                        ev.get("content", ""),
+                        ev.get("pubkey", pk_hex),
+                        nostr_priv,
+                    )
+                    data = json.loads(plaintext)
+                    source = None
+                    if isinstance(data, dict):
+                        if isinstance(data.get("users"), dict):
+                            source = data["users"]
+                        elif isinstance(data.get("nonces"), dict):
+                            source = data["nonces"]
+                    if isinstance(source, dict):
+                        out: Dict[str, Dict[str, int]] = {}
+                        for user, sites in source.items():
+                            if not isinstance(sites, dict):
+                                continue
+                            coerced: Dict[str, int] = {}
+                            for site, nonce in sites.items():
+                                try:
+                                    coerced[site] = int(nonce)
                                     logger.debug(
-                                        "File aggregated nonces for %s: %s",
+                                        "File nonce[%s][%s]=%d",
                                         user,
-                                        coerced,
+                                        site,
+                                        coerced[site],
                                     )
-                            if out:
-                                logger.debug("Returning nonces from file: %s", out)
-                                return out
+                                except Exception:
+                                    logger.debug(
+                                        "File invalid nonce[%s][%s]=%r",
+                                        user,
+                                        site,
+                                        nonce,
+                                    )
+                                    continue
+                            if coerced:
+                                out[user] = coerced
+                                logger.debug(
+                                    "File aggregated nonces for %s: %s",
+                                    user,
+                                    coerced,
+                                )
+                        if out:
+                            logger.debug("Returning nonces from file: %s", out)
+                            return out
     except Exception as exc:  # pragma: no cover - best effort
         logger.debug("Failed to read/decrypt nonces from file: %s", exc)
 
@@ -976,50 +999,60 @@ def load_nonces(
     logger.debug("Loading nonces from session cache")
     for ev in reversed(_SESSION_EVENTS.get(pk_hex, [])):
         tags = ev.get("tags") or []
-        if any(isinstance(t, list) and len(t) >= 2 and t[0] == "t" and t[1] == NONCES_TAG for t in tags):
-            try:
-                plaintext = _decrypt_nip04(
-                    priv,
-                    ev.get("content", ""),
-                    ev.get("pubkey", pk_hex),
-                    nostr_priv,
-                )
-                data = json.loads(plaintext)
-                if isinstance(data, dict) and isinstance(data.get("nonces"), dict):
-                    out: Dict[str, Dict[str, int]] = {}
-                    for user, sites in data["nonces"].items():
-                        if not isinstance(sites, dict):
-                            continue
-                        coerced: Dict[str, int] = {}
-                        for site, nonce in sites.items():
-                            try:
-                                coerced[site] = int(nonce)
-                                logger.debug(
-                                    "Session nonce[%s][%s]=%d",
-                                    user,
-                                    site,
-                                    coerced[site],
-                                )
-                            except Exception:
-                                logger.debug(
-                                    "Session invalid nonce[%s][%s]=%r",
-                                    user,
-                                    site,
-                                    nonce,
-                                )
-                                continue
-                        if coerced:
-                            out[user] = coerced
+        if not any(
+            isinstance(t, list) and len(t) >= 2 and t[0] == "t" and t[1] in {BACKUP_TAG, NONCES_TAG}
+            for t in tags
+        ):
+            continue
+        try:
+            plaintext = _decrypt_nip04(
+                priv,
+                ev.get("content", ""),
+                ev.get("pubkey", pk_hex),
+                nostr_priv,
+            )
+            data = json.loads(plaintext)
+            source = None
+            if isinstance(data, dict):
+                if isinstance(data.get("users"), dict):
+                    source = data["users"]
+                elif isinstance(data.get("nonces"), dict):
+                    source = data["nonces"]
+            if isinstance(source, dict):
+                out: Dict[str, Dict[str, int]] = {}
+                for user, sites in source.items():
+                    if not isinstance(sites, dict):
+                        continue
+                    coerced: Dict[str, int] = {}
+                    for site, nonce in sites.items():
+                        try:
+                            coerced[site] = int(nonce)
                             logger.debug(
-                                "Session aggregated nonces for %s: %s",
+                                "Session nonce[%s][%s]=%d",
                                 user,
-                                coerced,
+                                site,
+                                coerced[site],
                             )
-                    if out:
-                        logger.debug("Returning nonces from session: %s", out)
-                        return out
-            except Exception as exc:
-                logger.debug("Failed to decrypt/parse nonces from session: %s", exc)
+                        except Exception:
+                            logger.debug(
+                                "Session invalid nonce[%s][%s]=%r",
+                                user,
+                                site,
+                                nonce,
+                            )
+                            continue
+                    if coerced:
+                        out[user] = coerced
+                        logger.debug(
+                            "Session aggregated nonces for %s: %s",
+                            user,
+                            coerced,
+                        )
+                if out:
+                    logger.debug("Returning nonces from session: %s", out)
+                    return out
+        except Exception as exc:
+            logger.debug("Failed to decrypt/parse nonces from session: %s", exc)
 
     logger.debug("No nonces found; returning empty mapping")
     return {}
