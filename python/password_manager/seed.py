@@ -16,7 +16,15 @@ import hashlib
 import os
 from typing import Dict, List, Optional
 from cryptography.hazmat.primitives.asymmetric import ec
-from .bech32 import encode_nsec
+
+# ``encode_nsec`` is only required when the optional python-nostr library is
+# available.  Some execution environments (such as the kata sandbox) omit the
+# supporting ``bech32`` helper; handle that gracefully by falling back to
+# ``None`` so higher level code can skip features that rely on it.
+try:  # pragma: no cover - optional dependency
+    from .bech32 import encode_nsec  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover - bech32 helper not present
+    encode_nsec = None  # type: ignore
 
 try:  # pragma: no cover - optional dependency
     from nostr.key import PrivateKey as NostrPrivateKey
@@ -111,7 +119,7 @@ def derive_keys(seed_phrase: str) -> dict:
     nostr_priv: Optional[NostrPrivateKey] = None
     if NostrPrivateKey:
         try:
-            if hasattr(NostrPrivateKey, "from_nsec"):
+            if hasattr(NostrPrivateKey, "from_nsec") and encode_nsec:
                 nostr_priv = NostrPrivateKey.from_nsec(encode_nsec(nsec))
             elif hasattr(NostrPrivateKey, "from_hex"):
                 nostr_priv = NostrPrivateKey.from_hex(nsec)
