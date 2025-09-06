@@ -12,6 +12,8 @@ from password_manager.nostr_utils import (
     backup_to_nostr,
     restore_from_nostr,
     restore_history_from_nostr,
+    load_nonces,
+    NONCES_TAG,
 )
 
 
@@ -60,13 +62,7 @@ class PasswordManagerGUI(tk.Tk):
         tk.Button(self, text="Edit Nonces", command=self.edit_nonces).pack(pady=5)
 
         self.keys = None
-        self.nonces_file = Path(__file__).resolve().parent / "nonces.json"
         self.nonces = {}
-        if self.nonces_file.exists():
-            try:
-                self.nonces = json.loads(self.nonces_file.read_text())
-            except Exception:
-                self.nonces = {}
 
         self.user_entry.bind("<FocusOut>", lambda e: self.update_nonce_field())
         self.site_entry.bind("<FocusOut>", lambda e: self.update_nonce_field())
@@ -76,6 +72,13 @@ class PasswordManagerGUI(tk.Tk):
         if verify_seed_phrase(phrase):
             self.keys = derive_keys(phrase)
             messagebox.showinfo("Seed", "Seed phrase is valid")
+            # Load nonces for this pubkey from local/relay backups
+            try:
+                relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
+                self.nonces = load_nonces(self.keys["private_key"], relay_urls=relay_urls, debug=self.debug)
+                self.update_nonce_field()
+            except Exception:
+                pass
         else:
             messagebox.showerror("Seed", "Invalid seed phrase")
 
@@ -94,7 +97,6 @@ class PasswordManagerGUI(tk.Tk):
 
         if user and site:
             self.nonces.setdefault(user, {})[site] = nonce
-            self.nonces_file.write_text(json.dumps(self.nonces, indent=2))
 
     def backup(self):
         if not self.keys:
@@ -107,10 +109,25 @@ class PasswordManagerGUI(tk.Tk):
             "nonce": self.nonce_entry.get().strip(),
             "password": self.password_var.get(),
         }
-        event_id = backup_to_nostr(
-            self.keys["private_key"], data, relay_urls=relay_urls, debug=self.debug
+        result = backup_to_nostr(
+            self.keys["private_key"],
+            data,
+            relay_urls=relay_urls,
+            debug=self.debug,
+            return_status=True,
         )
-        messagebox.showinfo("Backup", f"Backup stored with id {event_id}")
+        # result is a dict when return_status=True
+        event_id = result["event_id"]
+        if result.get("published"):
+            messagebox.showinfo(
+                "Backup",
+                f"Backup stored and published (id {event_id})",
+            )
+        else:
+            messagebox.showinfo(
+                "Backup",
+                f"No relay connection; local encrypted backup created only (id {event_id})",
+            )
 
     def restore(self):
         if not self.keys:
@@ -138,14 +155,85 @@ class PasswordManagerGUI(tk.Tk):
             messagebox.showerror("Error", "Verify the seed first")
             return
         relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
+        # Retrieve the 5 latest events (merged: relays, local, session)
         history = restore_history_from_nostr(
-            self.keys["private_key"], relay_urls=relay_urls, debug=self.debug
+            self.keys["private_key"], relay_urls=relay_urls, debug=self.debug, limit=5
         )
+
         win = tk.Toplevel(self)
-        win.title("Nostr History")
-        text = tk.Text(win, width=60, height=20)
-        text.pack()
-        text.insert(tk.END, json.dumps(history, indent=2))
+        win.title("Nostr History (select to restore)")
+
+        # Listbox to show entries with timestamp and summary
+        frame = tk.Frame(win)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        listbox = tk.Listbox(frame, width=60, height=12)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(frame, orient=tk.VERTICAL, command=listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        listbox.config(yscrollcommand=scrollbar.set)
+
+        def fmt_item(item):
+            ts = int(item.get("created_at", 0))
+            try:
+                import time as _t
+                human = _t.strftime("%Y-%m-%d %H:%M:%S", _t.localtime(ts)) if ts else ""
+            except Exception:
+                human = str(ts)
+            src = item.get("source", "")
+            eid = item.get("event_id", "")
+            # If this is a nonces snapshot, present a tailored summary
+            if isinstance(item, dict) and "nonces" in item:
+                try:
+                    count = len(item.get("nonces") or {})
+                except Exception:
+                    count = 0
+                return f"{human}  NONCES snapshot ({count} entries)  [{src}]  id={eid[:10]}..."
+            # Otherwise treat as a standard password backup event
+            user = item.get("user", "")
+            site = item.get("site", "")
+            nonce = item.get("nonce", "")
+            return f"{human}  {user}@{site} nonce={nonce}  [{src}]  id={eid[:10]}..."
+
+        for it in history:
+            listbox.insert(tk.END, fmt_item(it))
+
+        # Restore selected item
+        def do_restore():
+            idx = listbox.curselection()
+            if not idx:
+                messagebox.showinfo("History", "Select an event to restore")
+                return
+            item = history[idx[0]]
+            # If the item is a nonces snapshot, update nonces and refresh field
+            if isinstance(item, dict) and "nonces" in item:
+                try:
+                    self.nonces = item.get("nonces") or {}
+                    self.update_nonce_field()
+                    messagebox.showinfo("Restore", f"Loaded NONCES snapshot {item.get('event_id','')}")
+                except Exception as exc:
+                    messagebox.showerror("Restore", f"Failed to load nonces: {exc}")
+            else:
+                # Load fields into the main form for password backup
+                self.user_entry.delete(0, tk.END)
+                self.user_entry.insert(0, item.get("user", ""))
+                self.site_entry.delete(0, tk.END)
+                self.site_entry.insert(0, item.get("site", ""))
+                self.nonce_entry.delete(0, tk.END)
+                self.nonce_entry.insert(0, str(item.get("nonce", "0")))
+                self.password_var.set(item.get("password", ""))
+                messagebox.showinfo("Restore", f"Loaded event {item.get('event_id','')}")
+            win.destroy()
+
+        btn_frame = tk.Frame(win)
+        btn_frame.pack(fill=tk.X)
+        tk.Button(btn_frame, text="Restore Selected", command=do_restore).pack(side=tk.RIGHT, padx=5, pady=5)
+
+        def on_double_click(event):
+            do_restore()
+
+        listbox.bind("<Double-Button-1>", on_double_click)
 
     def edit_nonces(self):
         win = tk.Toplevel(self)
@@ -157,7 +245,20 @@ class PasswordManagerGUI(tk.Tk):
         def save():
             try:
                 self.nonces = json.loads(text.get("1.0", tk.END))
-                self.nonces_file.write_text(json.dumps(self.nonces, indent=2))
+                # Save nonces snapshot locally and publish to relays (if reachable)
+                relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
+                result = backup_to_nostr(
+                    self.keys["private_key"],
+                    {"nonces": self.nonces},
+                    relay_urls=relay_urls,
+                    debug=self.debug,
+                    return_status=True,
+                    tag=NONCES_TAG,
+                )
+                if result.get("published"):
+                    messagebox.showinfo("Nonces", f"Nonces saved and published (id {result['event_id']})")
+                else:
+                    messagebox.showinfo("Nonces", f"No relay connection; local encrypted nonces backup created only (id {result['event_id']})")
                 win.destroy()
                 self.update_nonce_field()
             except Exception as exc:
@@ -179,6 +280,12 @@ class PasswordManagerGUI(tk.Tk):
         self.seed_entry.insert(0, phrase)
         self.keys = derive_keys(phrase)
         messagebox.showinfo("Seed", "New seed phrase generated")
+        try:
+            relay_urls = [u.strip() for u in self.relay_entry.get().split(',') if u.strip()] or None
+            self.nonces = load_nonces(self.keys["private_key"], relay_urls=relay_urls, debug=self.debug)
+            self.update_nonce_field()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

@@ -62,6 +62,10 @@ logger = logging.getLogger(__name__)
 # Local JSON file used for unit tests and offline storage
 BACKUP_FILE = Path("backups.json")
 
+# Tags used to classify different backup event types
+BACKUP_TAG = "nostr-pwd-backup"
+NONCES_TAG = "nostr-pwd-nonces"
+
 
 def _configure_debug_logging(debug: bool) -> None:
     """Ensure debug log messages are visible when ``debug`` is ``True``.
@@ -305,6 +309,7 @@ def _create_event(
     pk_hex: str,
     content: str,
     nostr_priv: Optional[NostrPrivateKey] = None,
+    tag: str = BACKUP_TAG,
 ) -> Dict:
     """Create a Nostr style event signed with ``sk_hex``."""
 
@@ -317,7 +322,7 @@ def _create_event(
             content,
             int(time.time()),
             1,
-            [["t", "nostr-pwd-backup"]],
+            [["t", tag]],
         )
         nostr_priv.sign_event(ev)
         nostr_event = {
@@ -338,7 +343,7 @@ def _create_event(
         pk_hex,
         int(time.time()),
         1,
-        [["t", "nostr-pwd-backup"]],
+        [["t", tag]],
         content,
     ]
     serialized = json.dumps(event, separators=(",", ":"), ensure_ascii=False)
@@ -349,7 +354,7 @@ def _create_event(
         "pubkey": pk_hex,
         "created_at": event[2],
         "kind": 1,
-        "tags": [["t", "nostr-pwd-backup"]],
+        "tags": [["t", tag]],
         "content": content,
         "sig": sig,
     }
@@ -522,13 +527,13 @@ def _publish_event_to_relay(url: str, event: Dict) -> bool:
         ws.close()
 
 
-def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
-    """Fetch the most recent backup event for ``pk_hex`` from ``url``."""
+def _fetch_event_from_relay(url: str, pk_hex: str, tag: str = BACKUP_TAG) -> Optional[Dict]:
+    """Fetch the most recent event for ``pk_hex`` from ``url`` filtered by ``tag``."""
     logger.debug("Connecting to relay %s", url)
     ws = _WSConnection(url)
     try:
         sub_id = os.urandom(4).hex()
-        filt = {"authors": [pk_hex], "#t": ["nostr-pwd-backup"], "kinds": [1], "limit": 1}
+        filt = {"authors": [pk_hex], "#t": [tag], "kinds": [1], "limit": 1}
         req = json.dumps(["REQ", sub_id, filt])
         logger.debug("Sending REQ to %s: %s", url, req)
         ws.send(req)
@@ -545,8 +550,8 @@ def _fetch_event_from_relay(url: str, pk_hex: str) -> Optional[Dict]:
     return None
 
 
-def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50) -> List[Dict]:
-    """Fetch up to ``limit`` backup events for ``pk_hex`` from ``url``."""
+def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50, tag: str = BACKUP_TAG) -> List[Dict]:
+    """Fetch up to ``limit`` events for ``pk_hex`` from ``url`` filtered by ``tag``."""
     logger.debug("Connecting to relay %s", url)
     ws = _WSConnection(url)
     events: List[Dict] = []
@@ -554,7 +559,7 @@ def _fetch_history_from_relay(url: str, pk_hex: str, limit: int = 50) -> List[Di
         sub_id = os.urandom(4).hex()
         filt = {
             "authors": [pk_hex],
-            "#t": ["nostr-pwd-backup"],
+            "#t": [tag],
             "kinds": [1],
             "limit": limit,
         }
@@ -579,14 +584,21 @@ def backup_to_nostr(
     data: Dict,
     relay_urls: Optional[List[str]] = None,
     debug: bool = False,
-
-) -> str:
+    return_status: bool = False,
+    tag: str = BACKUP_TAG,
+) -> object:
     """Backup ``data`` to Nostr relays; cache in session memory.
 
     - Publishes the encrypted event to provided ``relay_urls`` or defaults.
     - Always stores the event in a session cache keyed by pubkey for quick
-      restore within the same runtime.
+      restore within the same runtime and persists to a local JSON file.
+    - When no relays acknowledge the event, the local JSON file serves as an
+      offline backup containing the same encrypted event format.
     - Detailed debug logs are emitted when ``debug=True``.
+
+    Compatibility: by default returns the event id as ``str``. When
+    ``return_status=True`` it returns a dict with keys ``event_id`` (str),
+    ``published`` (bool), ``relays_ack`` (int) and ``relays_attempted`` (int).
     """
 
     _configure_debug_logging(debug)
@@ -594,7 +606,7 @@ def backup_to_nostr(
     sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
     logger.debug("Preparing backup for pubkey=%s", pk_hex)
     content = _encrypt_nip04(priv, json.dumps(data, sort_keys=True), nostr_priv)
-    event = _create_event(sk_hex, pk_hex, content, nostr_priv)
+    event = _create_event(sk_hex, pk_hex, content, nostr_priv, tag=tag)
     urls = relay_urls or DEFAULT_RELAYS
     logger.debug("Publishing to relays: %s", urls)
     success_count = 0
@@ -630,6 +642,15 @@ def backup_to_nostr(
         len(urls),
         event["id"],
     )
+    if success_count == 0:
+        logger.debug("No relay acknowledgments; created local backup only")
+    if return_status:
+        return {
+            "event_id": event["id"],
+            "published": success_count > 0,
+            "relays_ack": success_count,
+            "relays_attempted": len(urls),
+        }
     return event["id"]
 
 
@@ -705,9 +726,13 @@ def restore_history_from_nostr(
     debug: bool = False,
     limit: int = 50,
 ) -> List[Dict]:
-    """Return a list of all decrypted backup entries for the key.
+    """Return a list of decrypted backup entries for the key.
 
-    Prefers relay history; falls back to session cache.
+    Collects from relays, local backup file, and session cache, then
+    de-duplicates by event id and returns the most recent ``limit`` items.
+    Each returned dict includes original fields plus ``event_id`` and
+    ``created_at`` (int). When available, an additional ``source`` key may be
+    present with values: ``relay``, ``file``, or ``session``.
     """
 
     _configure_debug_logging(debug)
@@ -719,26 +744,62 @@ def restore_history_from_nostr(
     logger.debug("Fetching history from relays: %s", urls)
     for url in urls:
         try:
-            events.extend(_fetch_history_from_relay(url, pk_hex, limit))
+            # Fetch standard backup entries
+            fetched = _fetch_history_from_relay(url, pk_hex, limit, tag=BACKUP_TAG)
+            for ev in fetched:
+                ev.setdefault("_source", "relay")
+            events.extend(fetched)
+            # Fetch nonces snapshots as part of history too
+            fetched_nonces = _fetch_history_from_relay(
+                url, pk_hex, limit, tag=NONCES_TAG
+            )
+            for ev in fetched_nonces:
+                ev.setdefault("_source", "relay")
+            events.extend(fetched_nonces)
         except Exception as exc:
             logger.debug("Failed to fetch history from %s: %s", url, exc)
 
-    if not events:
-        logger.debug("No relay history; checking backup file")
-        try:
-            if BACKUP_FILE.exists():
-                file_events = json.loads(BACKUP_FILE.read_text())
-                if isinstance(file_events, list):
-                    events = [e for e in file_events if e.get("pubkey") == pk_hex][-limit:]
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.debug("Failed to read backup file %s: %s", BACKUP_FILE, exc)
+    # Always consider local backup file as well (merge), best-effort
+    logger.debug("Merging local backup file history if available")
+    try:
+        if BACKUP_FILE.exists():
+            file_events = json.loads(BACKUP_FILE.read_text())
+            if isinstance(file_events, list):
+                for e in file_events:
+                    if e.get("pubkey") == pk_hex:
+                        e.setdefault("_source", "file")
+                        events.append(e)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.debug("Failed to read backup file %s: %s", BACKUP_FILE, exc)
 
-    if not events:
-        logger.debug("No relay history; falling back to session cache")
-        events = _SESSION_EVENTS.get(pk_hex, [])[-limit:]
+    # Include session cache entries too
+    logger.debug("Merging session cache history")
+    for e in _SESSION_EVENTS.get(pk_hex, []):
+        ev = dict(e)
+        ev.setdefault("_source", "session")
+        events.append(ev)
+
+    # De-duplicate by id, prefer relay over file over session
+    def _pref_order(src: str) -> int:
+        return {"relay": 3, "file": 2, "session": 1}.get(src, 0)
+
+    dedup: Dict[str, Dict] = {}
+    for ev in events:
+        eid = ev.get("id")
+        src = ev.get("_source", "")
+        if not eid:
+            continue
+        existing = dedup.get(eid)
+        if not existing or _pref_order(src) > _pref_order(existing.get("_source", "")):
+            dedup[eid] = ev
+
+    # Sort by created_at desc and keep the most recent "limit"
+    events_sorted = sorted(
+        dedup.values(), key=lambda e: int(e.get("created_at", 0)), reverse=True
+    )[:limit]
 
     history: List[Dict] = []
-    for event in events:
+    for event in events_sorted:
         try:
             decrypted = _decrypt_nip04(
                 priv,
@@ -748,7 +809,112 @@ def restore_history_from_nostr(
             )
             item = json.loads(decrypted)
             item["event_id"] = event.get("id")
+            if "created_at" in event:
+                item["created_at"] = event.get("created_at")
+            if event.get("_source"):
+                item["source"] = event.get("_source")
             history.append(item)
         except Exception as exc:
             logger.debug("Failed to decrypt event %s: %s", event.get("id"), exc)
     return history
+
+
+def load_nonces(
+    private_key_hex: str,
+    relay_urls: Optional[List[str]] = None,
+    debug: bool = False,
+) -> Dict[str, int]:
+    """Load the latest nonces mapping for the key from relays or local cache.
+
+    - Tries relays first (most recent NONCES_TAG event), then local file, then
+      in-memory session cache. Returns an empty dict if none found.
+    """
+
+    _configure_debug_logging(debug)
+
+    sk_hex, pk_hex, priv, nostr_priv = _derive_keypair(private_key_hex)
+
+    # Try relays
+    urls = relay_urls or DEFAULT_RELAYS
+    logger.debug("Loading nonces from relays: %s", urls)
+    for url in urls:
+        try:
+            event = _fetch_event_from_relay(url, pk_hex, tag=NONCES_TAG)
+        except Exception as exc:
+            logger.debug("Failed to fetch nonces from %s: %s", url, exc)
+            event = None
+        if event:
+            try:
+                plaintext = _decrypt_nip04(
+                    priv,
+                    event.get("content", ""),
+                    event.get("pubkey", pk_hex),
+                    nostr_priv,
+                )
+                data = json.loads(plaintext)
+                if isinstance(data, dict) and "nonces" in data and isinstance(data["nonces"], dict):
+                    # coerce int values when possible
+                    out = {}
+                    for k, v in data["nonces"].items():
+                        try:
+                            out[k] = int(v)
+                        except Exception:
+                            continue
+                    return out
+            except Exception as exc:
+                logger.debug("Failed to decrypt/parse nonces: %s", exc)
+
+    # Try local backup file
+    logger.debug("Loading nonces from local backup file")
+    try:
+        if BACKUP_FILE.exists():
+            file_events = json.loads(BACKUP_FILE.read_text())
+            if isinstance(file_events, list):
+                for ev in reversed(file_events):
+                    if ev.get("pubkey") != pk_hex:
+                        continue
+                    tags = ev.get("tags") or []
+                    if any(isinstance(t, list) and len(t) >= 2 and t[0] == "t" and t[1] == NONCES_TAG for t in tags):
+                        plaintext = _decrypt_nip04(
+                            priv,
+                            ev.get("content", ""),
+                            ev.get("pubkey", pk_hex),
+                            nostr_priv,
+                        )
+                        data = json.loads(plaintext)
+                        if isinstance(data, dict) and "nonces" in data and isinstance(data["nonces"], dict):
+                            out = {}
+                            for k, v in data["nonces"].items():
+                                try:
+                                    out[k] = int(v)
+                                except Exception:
+                                    continue
+                            return out
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.debug("Failed to read/decrypt nonces from file: %s", exc)
+
+    # Try session cache
+    logger.debug("Loading nonces from session cache")
+    for ev in reversed(_SESSION_EVENTS.get(pk_hex, [])):
+        tags = ev.get("tags") or []
+        if any(isinstance(t, list) and len(t) >= 2 and t[0] == "t" and t[1] == NONCES_TAG for t in tags):
+            try:
+                plaintext = _decrypt_nip04(
+                    priv,
+                    ev.get("content", ""),
+                    ev.get("pubkey", pk_hex),
+                    nostr_priv,
+                )
+                data = json.loads(plaintext)
+                if isinstance(data, dict) and "nonces" in data and isinstance(data["nonces"], dict):
+                    out = {}
+                    for k, v in data["nonces"].items():
+                        try:
+                            out[k] = int(v)
+                        except Exception:
+                            continue
+                    return out
+            except Exception as exc:
+                logger.debug("Failed to decrypt/parse nonces from session: %s", exc)
+
+    return {}
